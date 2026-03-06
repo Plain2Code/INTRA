@@ -1,0 +1,1132 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>INTRA Trading Bot</title>
+<style>
+:root {
+  --bg: #0d1117;
+  --surface: #161b22;
+  --border: #30363d;
+  --text: #e6edf3;
+  --text-dim: #8b949e;
+  --green: #3fb950;
+  --red: #f85149;
+  --blue: #58a6ff;
+  --yellow: #d29922;
+  --orange: #db6d28;
+  --purple: #bc8cff;
+}
+* { margin: 0; padding: 0; box-sizing: border-box; }
+body {
+  font-family: 'SF Mono', 'Fira Code', 'Consolas', monospace;
+  background: var(--bg); color: var(--text);
+  font-size: 13px; line-height: 1.5;
+}
+.container { max-width: 1280px; margin: 0 auto; padding: 16px; }
+header {
+  display: flex; justify-content: space-between; align-items: center;
+  padding: 12px 0; border-bottom: 1px solid var(--border); margin-bottom: 16px;
+}
+header h1 { font-size: 18px; font-weight: 600; }
+.header-right { display: flex; align-items: center; gap: 12px; }
+.mode-badge {
+  padding: 4px 12px; border-radius: 12px; font-size: 11px;
+  font-weight: 700; text-transform: uppercase;
+}
+.mode-demo { background: var(--blue); color: #000; }
+.mode-live { background: var(--red); color: #fff; }
+.connection-dot { width: 8px; height: 8px; border-radius: 50%; display: inline-block; margin-right: 6px; }
+.dot-connected { background: var(--green); }
+.dot-disconnected { background: var(--red); }
+.grid { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; margin-bottom: 12px; }
+.grid-3 { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 12px; margin-bottom: 12px; }
+.card {
+  background: var(--surface); border: 1px solid var(--border);
+  border-radius: 8px; padding: 14px;
+}
+.card h2 {
+  font-size: 11px; color: var(--text-dim); text-transform: uppercase;
+  letter-spacing: 0.5px; margin-bottom: 10px;
+}
+.stat-value { font-size: 24px; font-weight: 700; }
+.stat-label { font-size: 11px; color: var(--text-dim); margin-top: 2px; }
+.positive { color: var(--green); }
+.negative { color: var(--red); }
+.neutral { color: var(--text-dim); }
+.log-info  { color: #8b949e; }
+.log-warn  { color: var(--yellow); }
+.log-error { color: var(--red); }
+.log-debug { color: #444d56; }
+.stat-row {
+  display: flex; justify-content: space-between; align-items: center;
+  padding: 5px 0; border-bottom: 1px solid var(--border);
+}
+.stat-row:last-child { border-bottom: none; }
+.drawdown-bar { height: 8px; background: var(--border); border-radius: 4px; margin-top: 8px; overflow: hidden; }
+.drawdown-fill { height: 100%; border-radius: 4px; transition: width 0.3s; }
+table { width: 100%; border-collapse: collapse; font-size: 12px; }
+th { text-align: left; color: var(--text-dim); font-weight: 500; padding: 6px 8px; border-bottom: 1px solid var(--border); }
+td { padding: 6px 8px; border-bottom: 1px solid var(--border); }
+button {
+  font-family: inherit; font-size: 12px; padding: 8px 16px; border-radius: 6px;
+  border: 1px solid var(--border); cursor: pointer; font-weight: 600; transition: all 0.15s;
+}
+button:hover { opacity: 0.85; }
+button:disabled { opacity: 0.4; cursor: not-allowed; }
+.btn-start { background: var(--green); color: #000; border-color: var(--green); font-size: 14px; padding: 12px 32px; }
+.btn-stop { background: var(--yellow); color: #000; border-color: var(--yellow); }
+.btn-kill { background: var(--red); color: #fff; border-color: var(--red); }
+.btn-refresh { background: transparent; color: var(--blue); border-color: var(--blue); }
+.btn-edit-assets { background: transparent; color: var(--text-dim); border-color: var(--border); font-size: 11px; padding: 4px 12px; }
+.no-data { color: var(--text-dim); text-align: center; padding: 16px; font-style: italic; }
+.wr-grid { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 6px; }
+.wr-item { text-align: center; padding: 6px; background: var(--bg); border-radius: 4px; }
+.wr-item .wr-label { font-size: 10px; color: var(--text-dim); }
+.wr-item .wr-value { font-size: 16px; font-weight: 700; margin-top: 2px; }
+.wr-item .wr-count { font-size: 10px; color: var(--text-dim); }
+.equity-chart { width: 100%; height: 80px; }
+.status-dot { width: 6px; height: 6px; border-radius: 50%; display: inline-block; margin-right: 4px; }
+.dot-running { background: var(--green); animation: pulse 2s infinite; }
+.dot-stopped { background: var(--red); }
+@keyframes pulse { 0%,100% { opacity: 1; } 50% { opacity: 0.4; } }
+
+/* Startup screen */
+#startup-screen {
+  display: flex; flex-direction: column; align-items: center;
+  justify-content: center; min-height: 70vh; gap: 24px;
+}
+#startup-screen h2 { font-size: 20px; font-weight: 400; color: var(--text-dim); }
+.instrument-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px; width: 100%; max-width: 700px; }
+.instrument-card {
+  background: var(--surface); border: 2px solid var(--border); border-radius: 8px;
+  padding: 16px; cursor: pointer; transition: all 0.15s; text-align: center;
+}
+.instrument-card:hover { border-color: var(--blue); }
+.instrument-card.selected { border-color: var(--green); background: #23883515; }
+.instrument-card .inst-name { font-size: 14px; font-weight: 700; }
+.instrument-card .inst-epic { font-size: 11px; color: var(--text-dim); margin-top: 2px; }
+.instrument-card .inst-session { font-size: 10px; color: var(--text-dim); margin-top: 4px; }
+#bot-view { display: none; }
+
+/* Asset Filter */
+.asset-filter-bar {
+  display: flex; align-items: center; gap: 12px; margin-bottom: 12px;
+  padding: 8px 14px; background: var(--surface); border: 1px solid var(--border);
+  border-radius: 8px;
+}
+.asset-filter-bar label { color: var(--text-dim); font-size: 11px; text-transform: uppercase; letter-spacing: 0.5px; }
+.asset-filter-bar select {
+  background: var(--bg); color: var(--text); border: 1px solid var(--border);
+  border-radius: 4px; padding: 4px 8px; font-family: inherit; font-size: 12px;
+}
+.asset-count { font-size: 11px; color: var(--text-dim); margin-left: auto; }
+
+/* Market Sessions */
+.utc-clock { font-size: 32px; font-weight: 700; letter-spacing: 2px; }
+.market-status-badge {
+  display: inline-block; padding: 4px 14px; border-radius: 12px;
+  font-size: 12px; font-weight: 700; text-transform: uppercase; margin-top: 6px;
+}
+.market-open { background: var(--green); color: #000; }
+.market-closed { background: var(--red); color: #fff; }
+.sessions-bar { display: flex; gap: 6px; margin-top: 12px; flex-wrap: wrap; }
+.session-badge {
+  padding: 4px 10px; border-radius: 4px; font-size: 11px; font-weight: 600;
+  transition: all 0.3s;
+}
+.session-badge.active { opacity: 1; }
+.session-badge.inactive { opacity: 0.3; }
+.session-sydney { background: #bc8cff33; color: var(--purple); }
+.session-sydney.active { background: #bc8cff55; }
+.session-tokyo { background: #f8514933; color: var(--red); }
+.session-tokyo.active { background: #f8514955; }
+.session-london { background: #58a6ff33; color: var(--blue); }
+.session-london.active { background: #58a6ff55; }
+.session-newyork { background: #3fb95033; color: var(--green); }
+.session-newyork.active { background: #3fb95055; }
+
+/* News events */
+.news-event {
+  display: flex; justify-content: space-between; align-items: center;
+  padding: 5px 0; border-bottom: 1px solid var(--border); font-size: 12px;
+}
+.news-event:last-child { border-bottom: none; }
+.news-event-left { display: flex; align-items: center; gap: 8px; }
+.news-impact {
+  width: 8px; height: 8px; border-radius: 50%; flex-shrink: 0;
+}
+.impact-High { background: var(--red); }
+.impact-Medium { background: var(--yellow); }
+.news-country { font-size: 10px; color: var(--text-dim); font-weight: 600; }
+.news-title { }
+.news-countdown { font-weight: 700; font-size: 11px; white-space: nowrap; }
+.news-blocking { color: var(--red); }
+.news-upcoming { color: var(--yellow); }
+.news-passed { color: var(--text-dim); }
+
+/* Asset Pipeline */
+.pipeline-row {
+  display: flex; align-items: stretch; padding: 10px 0;
+  border-bottom: 1px solid var(--border);
+}
+.pipeline-row:last-child { border-bottom: none; }
+.pipeline-epic {
+  font-weight: 700; font-size: 13px; min-width: 56px; margin-right: 12px;
+  display: flex; align-items: center;
+}
+.pipeline-stations {
+  display: flex; align-items: stretch; gap: 0; flex: 1; overflow-x: auto;
+}
+.pipeline-station {
+  padding: 6px 8px; border-radius: 4px; font-size: 11px; font-weight: 600;
+  border: 1px solid; min-width: 60px;
+  display: flex; flex-direction: column; justify-content: center; gap: 2px;
+}
+.pipeline-station .st-head { font-weight: 700; text-align: center; }
+.pipeline-station .st-detail { font-size: 9px; font-weight: 400; opacity: 0.8; }
+.pipeline-station .st-tags { display: flex; flex-wrap: wrap; gap: 2px; }
+.pipeline-station .st-tag {
+  font-size: 9px; padding: 1px 4px; border-radius: 2px; font-weight: 500; white-space: nowrap;
+}
+.st-tag.ok { background: #3fb95015; color: var(--green); }
+.st-tag.nok { background: #f8514915; color: var(--red); font-weight: 700; }
+.pipeline-station.pass {
+  border-color: #3fb95040; color: var(--green); background: #3fb95010;
+}
+.pipeline-station.fail {
+  border-color: #f8514940; color: var(--red); background: #f8514910;
+}
+.pipeline-station.pending {
+  border-color: var(--border); color: var(--text-dim); background: transparent;
+}
+.pipeline-station.ready {
+  border-color: var(--green); color: #000; background: var(--green);
+  font-weight: 700;
+}
+.pipeline-conn {
+  color: var(--border); font-size: 10px; margin: 0 4px; flex-shrink: 0;
+}
+.pipeline-conn.pass { color: var(--green); }
+.pipeline-trade {
+  display: flex; align-items: center; gap: 14px; flex: 1;
+  font-size: 12px; flex-wrap: wrap;
+}
+.trade-dir {
+  font-weight: 700; padding: 2px 8px; border-radius: 3px; font-size: 11px;
+}
+.trade-dir.BUY { background: #3fb95020; color: var(--green); }
+.trade-dir.SELL { background: #f8514920; color: var(--red); }
+.trade-cell { display: flex; flex-direction: column; }
+.trade-cell .t-label { font-size: 9px; color: var(--text-dim); line-height: 1; }
+.trade-cell .t-val { font-weight: 600; font-size: 12px; line-height: 1.4; }
+.trade-pnl { font-weight: 700; font-size: 15px; }
+.trade-stage {
+  font-size: 10px; padding: 2px 6px; border-radius: 3px; font-weight: 600;
+}
+.trade-stage.trailing { background: #3fb95020; color: var(--green); }
+.trade-stage.initial { background: #30363d; color: var(--text-dim); }
+</style>
+</head>
+<body>
+<div class="container">
+
+<header>
+  <h1>INTRA Trading Bot</h1>
+  <div class="header-right">
+    <button class="btn-edit-assets" id="btn-edit-assets" onclick="editAssets()" style="display:none;">Edit Assets</button>
+    <span><span class="connection-dot dot-disconnected" id="ws-dot"></span><span id="ws-status">Connecting...</span></span>
+    <span class="mode-badge mode-demo" id="mode-badge">DEMO</span>
+  </div>
+</header>
+
+<!-- ==================== STARTUP SCREEN ==================== -->
+<div id="startup-screen">
+  <h2>Select instruments and start the bot</h2>
+  <div class="instrument-grid" id="instrument-grid"></div>
+
+  <!-- Mode toggle – only visible when --live flag was passed to main.py -->
+  <div id="mode-toggle-row" style="display:none;flex-direction:column;align-items:center;gap:8px;margin-top:16px;">
+    <div style="display:flex;gap:0;border:1px solid var(--border);border-radius:8px;overflow:hidden;">
+      <button id="btn-mode-demo" onclick="setMode('demo')"
+        style="padding:8px 28px;border:none;cursor:pointer;font-family:inherit;font-size:12px;font-weight:700;background:var(--blue);color:#000;">
+        DEMO
+      </button>
+      <button id="btn-mode-live" onclick="setMode('live')"
+        style="padding:8px 28px;border:none;cursor:pointer;font-family:inherit;font-size:12px;font-weight:700;background:var(--surface);color:var(--text-dim);">
+        LIVE
+      </button>
+    </div>
+    <div id="live-warning" style="display:none;color:var(--red);font-size:12px;font-weight:600;text-align:center;">
+      ⚠ LIVE MODE – Echtes Kapital wird gehandelt!
+    </div>
+  </div>
+
+  <div style="display:flex;gap:12px;align-items:center;margin-top:12px;">
+    <button class="btn-start" id="btn-start" onclick="startBot()" disabled>Start Bot</button>
+  </div>
+  <div id="start-error" style="color:var(--red);font-size:12px;display:none;"></div>
+</div>
+
+<!-- ==================== BOT VIEW ==================== -->
+<div id="bot-view">
+
+<!-- Asset Filter Bar -->
+<div class="asset-filter-bar">
+  <label>Filter:</label>
+  <select id="asset-filter" onchange="applyAssetFilter()">
+    <option value="ALL">All Assets</option>
+  </select>
+  <span class="asset-count" id="asset-count">0 assets active</span>
+</div>
+
+<!-- Row 1: Account + Drawdown + Controls -->
+<div class="grid-3">
+  <div class="card">
+    <h2>Account</h2>
+    <div class="stat-value" id="balance">--</div>
+    <div class="stat-label">Balance</div>
+    <div class="stat-row" style="margin-top:8px"><span>Equity</span><span id="equity">--</span></div>
+    <div class="stat-row"><span>Margin Used</span><span id="margin-used">--</span></div>
+    <div class="stat-row"><span>Available</span><span id="available">--</span></div>
+    <div class="stat-row"><span>Daily P&L</span><span id="daily-pnl">--</span></div>
+    <div class="stat-row"><span>Trades today</span><span id="trade-count">0</span></div>
+    <div class="stat-row"><span>Consec. Losses</span><span id="consec-losses">0</span></div>
+    <div class="stat-row"><span>Status</span>
+      <span><span class="status-dot dot-stopped" id="status-dot"></span><span id="bot-status">Stopped</span></span>
+    </div>
+  </div>
+  <div class="card">
+    <h2>Daily Drawdown</h2>
+    <div class="stat-value" id="drawdown-pct">0.00%</div>
+    <div class="stat-label">Limit: 3.0%</div>
+    <div class="drawdown-bar"><div class="drawdown-fill" id="drawdown-fill" style="width:0%;background:var(--green);"></div></div>
+    <div class="stat-row"><span>Kill Switch</span><span id="kill-switch">Off</span></div>
+  </div>
+  <div class="card">
+    <h2>Bot Controls</h2>
+    <div style="display:flex;flex-direction:column;gap:8px;">
+      <button class="btn-stop" onclick="stopBot()">Stop Bot</button>
+      <button class="btn-kill" onclick="killSwitch()">Kill Switch</button>
+      <button class="btn-refresh" onclick="refresh()">Refresh</button>
+    </div>
+  </div>
+</div>
+
+<!-- Row 2: Market Sessions + Economic Calendar -->
+<div class="grid">
+  <div class="card">
+    <h2>Market Sessions</h2>
+    <div style="text-align:center;">
+      <div class="utc-clock" id="utc-clock">--:--:--</div>
+      <div class="stat-label">UTC</div>
+      <div id="market-status-list"></div>
+    </div>
+    <div class="sessions-bar" id="sessions-bar">
+      <span class="session-badge session-sydney inactive" id="sess-sydney">Sydney 21-06</span>
+      <span class="session-badge session-tokyo inactive" id="sess-tokyo">Tokyo 00-09</span>
+      <span class="session-badge session-london inactive" id="sess-london">London 07-16</span>
+      <span class="session-badge session-newyork inactive" id="sess-newyork">New York 12-21</span>
+    </div>
+  </div>
+  <div class="card">
+    <h2>Economic Calendar</h2>
+    <div id="news-events-list"><div class="no-data">Loading events...</div></div>
+  </div>
+</div>
+
+<!-- Asset Pipeline -->
+<div class="card" style="margin-bottom:12px">
+  <h2>Asset Pipeline</h2>
+  <div id="asset-pipeline"><div class="no-data">Waiting for data...</div></div>
+</div>
+
+<!-- Row 3: Equity Curve + Win Rates -->
+<div class="grid">
+  <div class="card">
+    <h2>Equity Curve</h2>
+    <canvas class="equity-chart" id="equity-chart"></canvas>
+    <div id="equity-label" class="stat-label" style="text-align:center;margin-top:4px;">--</div>
+  </div>
+  <div class="card">
+    <h2>Win Rates by Setup</h2>
+    <div class="wr-grid" id="winrate-grid"></div>
+  </div>
+</div>
+
+<!-- Recent Trades -->
+<div class="card" style="margin-bottom:12px;">
+  <h2>Recent Trades</h2>
+  <div style="overflow-x:auto;">
+  <table>
+    <thead><tr><th>Time</th><th>Epic</th><th>Setup</th><th>Dir</th><th>Conf</th><th>Entry</th><th>Exit</th><th>P&L</th><th>Exit Reason</th><th>Hold</th><th>Result</th></tr></thead>
+    <tbody id="trades-tbody"><tr><td colspan="11" class="no-data">No trades yet</td></tr></tbody>
+  </table>
+  </div>
+</div>
+
+<div class="card">
+  <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px;">
+    <h2 style="margin-bottom:0;">Terminal</h2>
+    <div style="display:flex;gap:6px;align-items:center;">
+      <button id="btn-log-level" onclick="toggleLogLevel()" style="font-size:11px;padding:3px 10px;background:var(--surface);border:1px solid var(--border);color:var(--text-dim);border-radius:4px;cursor:pointer;">INFO</button>
+      <button id="btn-term-pause" onclick="toggleTerminalPause()" style="font-size:11px;padding:3px 10px;background:var(--surface);border:1px solid var(--border);color:var(--text-dim);border-radius:4px;cursor:pointer;">⏸ Pause</button>
+    </div>
+  </div>
+  <div id="terminal-output" style="
+    background:#0a0e13;border:1px solid var(--border);border-radius:4px;
+    height:280px;overflow-y:auto;padding:8px 10px;font-size:11px;
+    line-height:1.6;font-family:'SF Mono','Fira Code','Consolas',monospace;">
+    <div class="log-info" style="color:var(--text-dim);">Waiting for logs...</div>
+  </div>
+</div>
+
+</div><!-- /bot-view -->
+</div><!-- /container -->
+
+<script>
+let ws = null;
+let reconnectTimer = null;
+let selectedInstruments = new Set();
+let botRunning = false;
+let lastStatus = null;
+let currentFilter = 'ALL';
+
+// ===== UTC Clock + Sessions =====
+const SESSIONS = [
+  { id: 'sess-sydney',   name: 'Sydney',   start: 21, end: 6  },
+  { id: 'sess-tokyo',    name: 'Tokyo',    start: 0,  end: 9  },
+  { id: 'sess-london',   name: 'London',   start: 7,  end: 16 },
+  { id: 'sess-newyork',  name: 'New York', start: 12, end: 21 },
+];
+
+const INSTRUMENT_SESSIONS = {
+  'DE40':   { open: 0, close: 21*60    },
+  'FR40':   { open: 0, close: 21*60    },
+  'US100':  { open: 0, close: 21*60+15 },
+  'US500':  { open: 0, close: 21*60+15 },
+  'UK100':  { open: 0, close: 21*60    },
+};
+
+function updateClock() {
+  const now = new Date();
+  const h = now.getUTCHours();
+  const m = now.getUTCMinutes();
+  const s = now.getUTCSeconds();
+  document.getElementById('utc-clock').textContent =
+    String(h).padStart(2,'0') + ':' + String(m).padStart(2,'0') + ':' + String(s).padStart(2,'0');
+
+  const dayOfWeek = now.getUTCDay();
+  const isWeekend = dayOfWeek === 0 || dayOfWeek === 6;
+
+  SESSIONS.forEach(sess => {
+    const el = document.getElementById(sess.id);
+    let active = false;
+    if (!isWeekend) {
+      if (sess.start > sess.end) {
+        active = h >= sess.start || h < sess.end;
+      } else {
+        active = h >= sess.start && h < sess.end;
+      }
+    }
+    el.className = el.className.replace(/active|inactive/g, '').trim() + (active ? ' active' : ' inactive');
+  });
+
+  const instruments = lastStatus?.instruments || [];
+  const statusList = document.getElementById('market-status-list');
+  const epicsToShow = currentFilter === 'ALL' ? instruments : instruments.filter(e => e === currentFilter);
+  if (epicsToShow.length === 0) {
+    statusList.innerHTML = '<span class="market-status-badge market-closed">NO INSTRUMENT</span>';
+  } else if (isWeekend) {
+    statusList.innerHTML = '<span class="market-status-badge market-closed">WEEKEND</span>';
+  } else {
+    const nowMin = h * 60 + m;
+    statusList.innerHTML = epicsToShow.map(epic => {
+      const sess = INSTRUMENT_SESSIONS[epic];
+      if (!sess) return '';
+      const isOpen = nowMin >= sess.open && nowMin < sess.close;
+      const cls = isOpen ? 'market-open' : 'market-closed';
+      const txt = isOpen ? 'OPEN' : 'CLOSED';
+      return `<span class="market-status-badge ${cls}" style="margin:3px 4px;font-size:10px;">${epic} ${txt}</span>`;
+    }).join('');
+  }
+}
+
+setInterval(updateClock, 1000);
+updateClock();
+
+// ===== Asset Filter =====
+function populateAssetFilter(instruments) {
+  const sel = document.getElementById('asset-filter');
+  sel.innerHTML = '<option value="ALL">All Assets</option>';
+  instruments.forEach(epic => {
+    sel.innerHTML += `<option value="${epic}">${epic}</option>`;
+  });
+  sel.value = currentFilter;
+  document.getElementById('asset-count').textContent = instruments.length + ' assets active';
+}
+
+function applyAssetFilter() {
+  currentFilter = document.getElementById('asset-filter').value;
+  if (lastStatus) updateDashboard(lastStatus);
+}
+
+// ===== WebSocket =====
+function connectWS() {
+  const proto = location.protocol === 'https:' ? 'wss:' : 'ws:';
+  ws = new WebSocket(`${proto}//${location.host}/ws`);
+  ws.onopen = () => {
+    document.getElementById('ws-dot').className = 'connection-dot dot-connected';
+    document.getElementById('ws-status').textContent = 'Connected';
+    if (reconnectTimer) { clearTimeout(reconnectTimer); reconnectTimer = null; }
+  };
+  ws.onclose = () => {
+    document.getElementById('ws-dot').className = 'connection-dot dot-disconnected';
+    document.getElementById('ws-status').textContent = 'Disconnected';
+    reconnectTimer = setTimeout(connectWS, 3000);
+  };
+  ws.onmessage = (event) => {
+    try {
+      const msg = JSON.parse(event.data);
+      if (msg.type === 'status') {
+        lastStatus = msg.data;
+        handleStatus(msg.data);
+      }
+      if (msg.type === 'error') {
+        console.error('[WS] Bot error:', msg.data.message);
+      }
+    } catch(e) {
+      console.error('[WS] Parse error:', e);
+    }
+  };
+}
+
+function handleStatus(d) {
+  if (d.running && !botRunning) {
+    botRunning = true;
+    document.getElementById('startup-screen').style.display = 'none';
+    document.getElementById('bot-view').style.display = 'block';
+    document.getElementById('btn-edit-assets').style.display = 'inline-block';
+    populateAssetFilter(d.instruments || []);
+  } else if (!d.running && botRunning) {
+    botRunning = false;
+    document.getElementById('startup-screen').style.display = 'flex';
+    document.getElementById('bot-view').style.display = 'none';
+    document.getElementById('btn-edit-assets').style.display = 'none';
+    return;
+  }
+  if (d.running) {
+    if (d.instruments) populateAssetFilter(d.instruments);
+    try { updateDashboard(d); } catch(e) { console.error('[Dashboard] Update error:', e); }
+  }
+}
+
+// ===== Startup Screen =====
+async function loadConfig() {
+  try {
+    const r = await fetch('/api/config');
+    const cfg = await r.json();
+    const grid = document.getElementById('instrument-grid');
+    grid.innerHTML = '';
+    cfg.instruments.forEach(inst => {
+      const card = document.createElement('div');
+      card.className = 'instrument-card';
+      card.dataset.epic = inst.epic;
+      card.innerHTML = `
+        <div class="inst-name">${inst.name}</div>
+        <div class="inst-epic">${inst.epic}</div>
+        <div class="inst-session">${inst.session}</div>
+      `;
+      card.onclick = () => toggleInstrument(card, inst.epic);
+      grid.appendChild(card);
+    });
+    if (cfg.allow_live) {
+      document.getElementById('mode-toggle-row').style.display = 'flex';
+    }
+    if (cfg.bot_running) {
+      botRunning = true;
+      document.getElementById('startup-screen').style.display = 'none';
+      document.getElementById('bot-view').style.display = 'block';
+      document.getElementById('btn-edit-assets').style.display = 'inline-block';
+    }
+  } catch(e) { console.error('[Config] Load error:', e); }
+}
+
+async function loadSavedAssets() {
+  try {
+    const r = await fetch('/api/active-assets');
+    const data = await r.json();
+    if (data.assets && data.assets.length > 0) {
+      data.assets.forEach(epic => {
+        const card = document.querySelector(`.instrument-card[data-epic="${epic}"]`);
+        if (card) {
+          selectedInstruments.add(epic);
+          card.classList.add('selected');
+        }
+      });
+      document.getElementById('btn-start').disabled = selectedInstruments.size === 0;
+    }
+  } catch(e) { console.error('[Assets] Load error:', e); }
+}
+
+function toggleInstrument(card, epic) {
+  if (selectedInstruments.has(epic)) {
+    selectedInstruments.delete(epic);
+    card.classList.remove('selected');
+  } else {
+    selectedInstruments.add(epic);
+    card.classList.add('selected');
+  }
+  document.getElementById('btn-start').disabled = selectedInstruments.size === 0;
+}
+
+let selectedMode = 'demo';
+
+function setMode(mode) {
+  selectedMode = mode;
+  const demoBtn = document.getElementById('btn-mode-demo');
+  const liveBtn = document.getElementById('btn-mode-live');
+  const warning = document.getElementById('live-warning');
+  if (mode === 'live') {
+    demoBtn.style.background = 'var(--surface)'; demoBtn.style.color = 'var(--text-dim)';
+    liveBtn.style.background = 'var(--red)'; liveBtn.style.color = '#fff';
+    warning.style.display = 'block';
+  } else {
+    demoBtn.style.background = 'var(--blue)'; demoBtn.style.color = '#000';
+    liveBtn.style.background = 'var(--surface)'; liveBtn.style.color = 'var(--text-dim)';
+    warning.style.display = 'none';
+  }
+}
+
+async function startBot() {
+  if (selectedInstruments.size === 0) return;
+  if (selectedMode === 'live' && !confirm('⚠ LIVE MODE aktivieren?\n\nEchtes Kapital wird gehandelt. Bist du sicher?')) return;
+  const btn = document.getElementById('btn-start');
+  btn.disabled = true; btn.textContent = 'Starting...';
+  const errEl = document.getElementById('start-error');
+  errEl.style.display = 'none';
+
+  try {
+    await fetch('/api/active-assets', {
+      method: 'POST', headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify({ assets: Array.from(selectedInstruments) })
+    });
+  } catch(e) { console.warn('Failed to save assets:', e); }
+
+  try {
+    const r = await fetch('/api/start', {
+      method: 'POST', headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify({ instruments: Array.from(selectedInstruments), live: selectedMode === 'live', use_ws_15min: true })
+    });
+    const data = await r.json();
+    if (data.error) {
+      errEl.textContent = data.error; errEl.style.display = 'block';
+      btn.disabled = false; btn.textContent = 'Start Bot';
+    } else {
+      botRunning = true;
+      document.getElementById('startup-screen').style.display = 'none';
+      document.getElementById('bot-view').style.display = 'block';
+      document.getElementById('btn-edit-assets').style.display = 'inline-block';
+    }
+  } catch(e) {
+    errEl.textContent = 'Connection failed: ' + e.message; errEl.style.display = 'block';
+    btn.disabled = false; btn.textContent = 'Start Bot';
+  }
+}
+
+function editAssets() {
+  document.getElementById('bot-view').style.display = 'none';
+  document.getElementById('startup-screen').style.display = 'flex';
+}
+
+// ===== Bot Controls =====
+async function stopBot() {
+  if (!confirm('Stop the bot?')) return;
+  await fetch('/api/stop', { method: 'POST' });
+}
+async function killSwitch() {
+  if (!confirm('KILL SWITCH: Close ALL positions and stop immediately?')) return;
+  await fetch('/api/kill-switch', { method: 'POST' });
+}
+function refresh() {
+  if (ws && ws.readyState === WebSocket.OPEN)
+    ws.send(JSON.stringify({ command: 'refresh' }));
+}
+
+// ===== Dashboard Update =====
+function updateDashboard(d) {
+  // Mode badge
+  const badge = document.getElementById('mode-badge');
+  badge.textContent = d.mode || 'DEMO';
+  badge.className = 'mode-badge ' + (d.mode === 'LIVE' ? 'mode-live' : 'mode-demo');
+
+  // Account
+  document.getElementById('balance').textContent = fmt(d.balance);
+  document.getElementById('equity').textContent = fmt(d.equity);
+  document.getElementById('margin-used').textContent = fmt(d.margin_used);
+  document.getElementById('available').textContent = fmt(d.available);
+  const pnlEl = document.getElementById('daily-pnl');
+  const pnl = d.daily_pnl || 0;
+  pnlEl.textContent = (pnl >= 0 ? '+' : '') + fmt(pnl) + ' (' + ((d.daily_pnl_pct||0)*100).toFixed(2) + '%)';
+  pnlEl.className = pnl >= 0 ? 'positive' : 'negative';
+  document.getElementById('trade-count').textContent = d.trade_count || 0;
+  const clEl = document.getElementById('consec-losses');
+  const cl = d.consecutive_losses || 0;
+  clEl.textContent = cl;
+  clEl.className = cl >= 3 ? 'negative' : cl >= 2 ? 'neutral' : '';
+
+  // Bot status
+  const statusEl = document.getElementById('bot-status');
+  const dotEl = document.getElementById('status-dot');
+  if (d.kill_switch) {
+    statusEl.textContent = 'KILL SWITCH'; statusEl.className = 'negative';
+    dotEl.className = 'status-dot dot-stopped';
+  } else if (d.running) {
+    statusEl.textContent = 'Running'; statusEl.className = 'positive';
+    dotEl.className = 'status-dot dot-running';
+  } else {
+    statusEl.textContent = 'Stopped'; statusEl.className = 'neutral';
+    dotEl.className = 'status-dot dot-stopped';
+  }
+
+  // Drawdown
+  const ddPct = (d.daily_drawdown_pct || 0) * 100;
+  document.getElementById('drawdown-pct').textContent = ddPct.toFixed(2) + '%';
+  const fill = document.getElementById('drawdown-fill');
+  fill.style.width = Math.min(ddPct / 3 * 100, 100) + '%';
+  fill.style.background = ddPct > 2.5 ? 'var(--red)' : ddPct > 1.5 ? 'var(--yellow)' : 'var(--green)';
+  const ksEl = document.getElementById('kill-switch');
+  ksEl.textContent = d.kill_switch ? 'ACTIVE' : 'Off';
+  ksEl.className = d.kill_switch ? 'negative' : 'neutral';
+
+  // Asset Pipeline (replaces Bias, Positions, Pipeline Matrix, Last Setup)
+  updateAssetPipeline(
+    d.pipeline_matrix || {},
+    d.open_positions || {},
+    d.biases || {},
+    d.instruments || []
+  );
+
+  // Economic Calendar
+  const epicCurrencies = d.epic_currencies || {};
+  updateNewsEvents(d.news_events || [], epicCurrencies);
+
+  // Equity Curve
+  drawEquityCurve(d.equity_history || []);
+
+  // Win Rates
+  const wrByEpic = d.winrate_stats_by_epic || {};
+  const stats = (currentFilter !== 'ALL' && wrByEpic[currentFilter])
+    ? wrByEpic[currentFilter]
+    : (d.winrate_stats || {});
+  const wrKeys = ['noise_breakout'];
+  const wrLabels = {'noise_breakout':'Noise BO'};
+  const wrGrid = document.getElementById('winrate-grid');
+  wrGrid.innerHTML = '';
+  let totalWins = 0, totalTrades = 0;
+  for (const key of wrKeys) {
+    const s = stats[key] || {wins:0,total:0,winrate:0};
+    totalWins += s.wins || 0;
+    totalTrades += s.total || 0;
+    const wr = s.total > 0 ? Math.round(s.wins/s.total*100) + '%' : '–';
+    const cls = s.total > 0 ? (s.wins/s.total >= 0.5 ? 'positive' : 'negative') : 'neutral';
+    const ev = s.ev != null ? (s.ev >= 0 ? '+' : '') + s.ev.toFixed(2) : '–';
+    const evCls = s.ev != null ? (s.ev > 0 ? 'positive' : 'negative') : 'neutral';
+    const pf = s.profit_factor != null && s.profit_factor < 999 ? s.profit_factor.toFixed(2) : '–';
+    const kelly = s.kelly != null ? (s.kelly * 100).toFixed(1) + '%' : '–';
+    wrGrid.innerHTML += `<div class="wr-item"><div class="wr-label">${wrLabels[key]}</div><div class="wr-value ${cls}">${wr}</div><div class="wr-count">${s.total} trades</div><div style="display:flex;gap:8px;font-size:10px;color:var(--text-dim);margin-top:2px;"><span>EV:<span class="${evCls}">${ev}</span></span><span>PF:${pf}</span><span>Kelly:${kelly}</span></div></div>`;
+  }
+  const totalWR = totalTrades > 0 ? Math.round(totalWins/totalTrades*100) + '%' : '–';
+  const totalCls = totalTrades > 0 ? (totalWins/totalTrades >= 0.5 ? 'positive' : 'negative') : 'neutral';
+  wrGrid.innerHTML += `<div class="wr-item" style="border-top:1px solid #30363d;margin-top:4px;padding-top:4px;"><div class="wr-label" style="font-weight:700;">Total</div><div class="wr-value ${totalCls}" style="font-weight:700;">${totalWR}</div><div class="wr-count">${totalTrades} trades</div></div>`;
+
+  // Recent Trades
+  const allTrades = d.recent_trades || [];
+  const trades = currentFilter === 'ALL' ? allTrades : allTrades.filter(t => t.epic === currentFilter);
+  const tbody = document.getElementById('trades-tbody');
+  if (!trades.length) {
+    tbody.innerHTML = '<tr><td colspan="11" class="no-data">No trades yet</td></tr>';
+  } else {
+    tbody.innerHTML = trades.map(t => {
+      const cls = t.pnl >= 0 ? 'positive' : 'negative';
+      const result = t.pnl >= 0 ? 'WIN' : 'LOSS';
+      const time = t.timestamp ? new Date(t.timestamp).toLocaleTimeString() : '--';
+      const conf = t.confidence != null ? (t.confidence*100).toFixed(0)+'%' : '--';
+      const exitR = t.exit_reason || '--';
+      const hold = t.hold_minutes != null ? Math.round(t.hold_minutes)+'m' : '--';
+      return `<tr><td>${time}</td><td>${t.epic}</td><td>${t.setup_type}</td><td>${t.direction}</td><td>${conf}</td><td>${fmt(t.entry_price)}</td><td>${fmt(t.exit_price)}</td><td class="${cls}">${(t.pnl>=0?'+':'')+fmt(t.pnl)}</td><td>${exitR}</td><td>${hold}</td><td class="${cls}" style="font-weight:700">${result}</td></tr>`;
+    }).join('');
+  }
+}
+
+// ===== Asset Pipeline =====
+function updateAssetPipeline(matrix, positions, biases, instruments) {
+  const container = document.getElementById('asset-pipeline');
+  const epics = currentFilter === 'ALL' ? instruments : instruments.filter(e => e === currentFilter);
+
+  if (!epics.length) {
+    container.innerHTML = '<div class="no-data">No instruments</div>';
+    return;
+  }
+
+  container.innerHTML = epics.map(epic => {
+    const pos = positions[epic];
+    if (pos) return renderTradeRow(epic, pos);
+    return renderPipelineRow(epic, matrix[epic], biases[epic]);
+  }).join('');
+}
+
+function renderTradeRow(epic, pos) {
+  const cls = pos.pnl >= 0 ? 'positive' : 'negative';
+  const dir = pos.direction || 'BUY';
+  const dirCls = dir === 'BUY' ? 'BUY' : 'SELL';
+
+  let slHtml;
+  if (pos.trailing_set) {
+    slHtml = `<span class="positive">${fmt(pos.trailing_stop)}</span><br><span style="font-size:9px;color:var(--text-dim)">±${fmt(pos.trailing_stop_distance)}</span>`;
+  } else {
+    slHtml = fmt(pos.stop_level);
+  }
+
+  const stage = pos.trailing_set
+    ? '<span class="trade-stage trailing">Trailing</span>'
+    : '<span class="trade-stage initial">Initial</span>';
+
+  return `<div class="pipeline-row">
+    <span class="pipeline-epic">${epic}</span>
+    <div class="pipeline-trade">
+      <span class="trade-dir ${dirCls}">${dir}</span>
+      <span style="color:var(--text-dim);font-size:11px;">${pos.setup_type || '--'}</span>
+      <div class="trade-cell"><span class="t-label">Entry</span><span class="t-val">${fmt(pos.open_level)}</span></div>
+      <div class="trade-cell"><span class="t-label">Now</span><span class="t-val" style="color:var(--text)">${fmt(pos.current_level)}</span></div>
+      <span class="trade-pnl ${cls}">${(pos.pnl >= 0 ? '+' : '') + fmt(pos.pnl)}€</span>
+      <div class="trade-cell"><span class="t-label">SL</span><span class="t-val">${slHtml}</span></div>
+      <div class="trade-cell"><span class="t-label">TP</span><span class="t-val">${fmt(pos.profit_level)}</span></div>
+      <span style="color:var(--text-dim);font-size:11px;">${pos.held_minutes != null ? pos.held_minutes + 'm' : '--'}</span>
+      ${stage}
+    </div>
+  </div>`;
+}
+
+function renderPipelineRow(epic, p, bias) {
+  if (!p) {
+    return `<div class="pipeline-row">
+      <span class="pipeline-epic">${epic}</span>
+      <div class="pipeline-stations"><span class="pipeline-station pending">Waiting...</span></div>
+    </div>`;
+  }
+
+  const blocked = getBlockedStation(p.blocked_at);
+  const stations = [
+    buildConstraintsStation(p, blocked),
+    buildBiasStation(p, bias, blocked),
+    buildSignalStation(p, blocked),
+    buildValidationStation(p, blocked),
+    buildStatusStation(blocked),
+  ];
+
+  let html = `<div class="pipeline-row"><span class="pipeline-epic">${epic}</span><div class="pipeline-stations">`;
+  for (let i = 0; i < stations.length; i++) {
+    if (i > 0) {
+      const prevPassed = blocked === -1 || blocked > (i - 1);
+      html += `<span class="pipeline-conn ${prevPassed ? 'pass' : ''}">▸</span>`;
+    }
+    html += stations[i];
+  }
+  html += `</div></div>`;
+  return html;
+}
+
+function getBlockedStation(blocked_at) {
+  if (blocked_at === null || blocked_at === undefined) return -1;
+  if (['constraints', 'cooldown', 'global_cooldown', 'correlation_limit', 'circuit_breaker'].includes(blocked_at)) return 0;
+  if (blocked_at === 'bias') return 1;
+  if (blocked_at === 'setup') return 2;
+  if (blocked_at === 'ev') return 3;
+  return 0;
+}
+
+function buildConstraintsStation(p, blocked) {
+  const checks = p.constraints || {};
+  const cls = blocked === 0 ? 'fail' : (Object.keys(checks).length > 0 ? 'pass' : 'pending');
+  const labels = {kill_switch:'Kill',bot_running:'Bot',weekend:'Wday',daily_loss:'DD',no_position:'Pos',max_positions:'Max',margin:'Mrgn',spread:'Sprd',session:'Sess',news:'News',cooldown:'CD',global_cooldown:'GCD',correlation_limit:'Corr',circuit_breaker:'CB'};
+
+  let tags = '';
+  for (const [key, c] of Object.entries(checks)) {
+    if (!c) continue;
+    const label = labels[key] || key;
+    const tcls = c.pass ? 'ok' : 'nok';
+    tags += `<span class="st-tag ${tcls}" title="${esc(c.reason || label)}">${c.pass ? '&#10003;' : '&#10007;'}${label}</span>`;
+  }
+
+  return `<span class="pipeline-station ${cls}">
+    <div class="st-tags">${tags || '—'}</div>
+  </span>`;
+}
+
+function buildBiasStation(p, bias, blocked) {
+  const biasLabel = p.bias || '—';
+  const cls = blocked === 1 ? 'fail' : (blocked === -1 || blocked > 1) ? 'pass' : 'pending';
+
+  const adx = bias?.adx ? bias.adx.toFixed(1) : '—';
+  const vol = bias?.volatility || p.volatility || '—';
+  const vp = bias?.volume_pressure || '—';
+  const tq = bias?.trend_quality != null ? bias.trend_quality.toFixed(2) : '—';
+
+  return `<span class="pipeline-station ${cls}">
+    <span class="st-head">${biasLabel}</span>
+    <span class="st-detail">ADX ${adx} | ${vol}</span>
+    <span class="st-detail">VP: ${vp} | TQ: ${tq}</span>
+  </span>`;
+}
+
+function buildSignalStation(p, blocked) {
+  const scan = p.setup_scan;
+  const cls = blocked === 2 ? 'fail' : (blocked === -1 || blocked > 2) ? 'pass' : 'pending';
+
+  if (scan && scan.signals) {
+    const sigLabels = {noise_breakout: 'Noise BO'};
+    let html = '';
+    for (const [key, sig] of Object.entries(scan.signals)) {
+      if (!sig || !sig.conditions || sig.conditions.length === 0) continue;
+      const label = sigLabels[key] || key;
+      const conf = (sig.confidence * 100).toFixed(0);
+      const min = (sig.min * 100).toFixed(0);
+      const ok = sig.confidence >= sig.min;
+      const dir = sig.direction ? ` ${sig.direction}` : '';
+      const icon = ok ? '&#10003;' : '&#10007;';
+      html += `<span class="st-detail" style="font-weight:600;">${icon} ${label}${dir} ${conf}%/${min}%</span>`;
+      // Show individual conditions
+      html += `<div class="st-tags">`;
+      for (const cond of sig.conditions) {
+        const tcls = cond.pass ? 'ok' : 'nok';
+        const gateTag = (cond.gate && !cond.pass) ? ' !' : '';
+        html += `<span class="st-tag ${tcls}" title="${esc(cond.val)}">${cond.pass ? '&#10003;' : '&#10007;'}${cond.name}${gateTag}</span>`;
+      }
+      html += `</div>`;
+    }
+    if (html) {
+      return `<span class="pipeline-station ${cls}">${html}</span>`;
+    }
+  }
+
+  const reason = (scan && scan.reason) ? scan.reason : 'No signal';
+  return `<span class="pipeline-station ${cls}">
+    <span class="st-detail">${esc(reason)}</span>
+  </span>`;
+}
+
+function buildValidationStation(p, blocked) {
+  const cls = blocked === 3 ? 'fail' : (blocked === -1 || blocked > 3) ? 'pass' : 'pending';
+  const ev = p.ev;
+
+  if (ev) {
+    let lines = '';
+    if (ev.passes !== undefined) {
+      lines += `<span class="st-head">${ev.passes ? 'Passed' : 'Rejected'}</span>`;
+    }
+    if (ev.rrr != null) lines += `<span class="st-detail">RRR ${ev.rrr.toFixed(2)}</span>`;
+    if (ev.sl_dist != null) lines += `<span class="st-detail">SL ${ev.sl_dist.toFixed(1)} | TP ${(ev.tp_dist||0).toFixed(1)}</span>`;
+    if (ev.reject) lines += `<span class="st-detail">${trunc(ev.reject, 28)}</span>`;
+    if (lines) return `<span class="pipeline-station ${cls}">${lines}</span>`;
+  }
+  return `<span class="pipeline-station ${cls}">
+    <span class="st-detail">Pending</span>
+  </span>`;
+}
+
+function buildStatusStation(blocked) {
+  if (blocked === -1) {
+    return `<span class="pipeline-station ready">
+      <span class="st-head">READY</span>
+    </span>`;
+  }
+  return `<span class="pipeline-station pending">
+    <span class="st-head">Scanning</span>
+  </span>`;
+}
+
+function trunc(s, max) {
+  if (!s) return '—';
+  return s.length > max ? s.substring(0, max - 1) + '…' : s;
+}
+
+function esc(s) {
+  if (!s) return '';
+  return s.replace(/&/g,'&amp;').replace(/"/g,'&quot;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+}
+
+// ===== News Events =====
+function updateNewsEvents(events, epicCurrencies) {
+  const container = document.getElementById('news-events-list');
+  let filtered = events || [];
+  if (currentFilter !== 'ALL' && epicCurrencies && epicCurrencies[currentFilter]) {
+    const currencies = epicCurrencies[currentFilter];
+    filtered = filtered.filter(e => currencies.includes(e.country));
+  }
+  if (!filtered.length) {
+    container.innerHTML = '<div class="no-data">No relevant events</div>';
+    return;
+  }
+  container.innerHTML = filtered.map(e => {
+    let cdClass = 'news-upcoming';
+    if (e.is_blocking) cdClass = 'news-blocking';
+    else if (e.countdown === 'passed') cdClass = 'news-passed';
+    else if (e.countdown === 'NOW') cdClass = 'news-blocking';
+
+    return `<div class="news-event">
+      <div class="news-event-left">
+        <span class="news-impact impact-${e.impact}"></span>
+        <span class="news-country">${e.country}</span>
+        <span class="news-title">${e.title}</span>
+      </div>
+      <div>
+        ${e.date ? `<span style="color:var(--text-dim);margin-right:8px;">${e.date}</span>` : ''}
+        <span style="color:var(--text-dim);margin-right:8px;">${e.time}</span>
+        <span class="news-countdown ${cdClass}">${e.is_blocking ? 'BLOCKED ' : ''}${e.countdown}</span>
+      </div>
+    </div>`;
+  }).join('');
+}
+
+// ===== Equity Curve =====
+function drawEquityCurve(history) {
+  const canvas = document.getElementById('equity-chart');
+  const ctx = canvas.getContext('2d');
+  const w = canvas.width = canvas.offsetWidth * 2;
+  const h = canvas.height = canvas.offsetHeight * 2;
+  ctx.clearRect(0, 0, w, h);
+  const label = document.getElementById('equity-label');
+
+  if (!history || history.length < 2) {
+    ctx.fillStyle = '#8b949e'; ctx.font = '22px monospace'; ctx.textAlign = 'center';
+    ctx.fillText('Waiting for data...', w/2, h/2);
+    label.textContent = '--'; return;
+  }
+
+  const vals = history.map(p => p.equity);
+  const mn = Math.min(...vals), mx = Math.max(...vals);
+  const range = mx - mn || 1;
+  const pad = 4;
+  const isUp = vals[vals.length-1] >= vals[0];
+  const lineColor = isUp ? '#3fb950' : '#f85149';
+  const grad = ctx.createLinearGradient(0, 0, 0, h);
+  grad.addColorStop(0, isUp ? '#3fb95030' : '#f8514930');
+  grad.addColorStop(1, 'transparent');
+
+  ctx.beginPath();
+  for (let i = 0; i < vals.length; i++) {
+    const x = pad + (i / (vals.length - 1)) * (w - 2*pad);
+    const y = h - pad - ((vals[i] - mn) / range) * (h - 2*pad);
+    i === 0 ? ctx.moveTo(x, y) : ctx.lineTo(x, y);
+  }
+  ctx.lineTo(w - pad, h - pad); ctx.lineTo(pad, h - pad); ctx.closePath();
+  ctx.fillStyle = grad; ctx.fill();
+
+  ctx.beginPath();
+  for (let i = 0; i < vals.length; i++) {
+    const x = pad + (i / (vals.length - 1)) * (w - 2*pad);
+    const y = h - pad - ((vals[i] - mn) / range) * (h - 2*pad);
+    i === 0 ? ctx.moveTo(x, y) : ctx.lineTo(x, y);
+  }
+  ctx.strokeStyle = lineColor; ctx.lineWidth = 2; ctx.stroke();
+
+  const diff = vals[vals.length-1] - vals[0];
+  label.textContent = fmt(vals[vals.length-1]) + ' (' + (diff >= 0 ? '+' : '') + fmt(diff) + ')';
+  label.className = 'stat-label ' + (diff >= 0 ? 'positive' : 'negative');
+}
+
+// ===== Helpers =====
+function fmt(n) {
+  if (n === null || n === undefined) return '--';
+  return Number(n).toLocaleString('en-US', {minimumFractionDigits:2, maximumFractionDigits:2});
+}
+
+// ===== Terminal Log =====
+let _terminalPaused = false;
+
+async function fetchLogs() {
+  if (_terminalPaused) return;
+  try {
+    const r = await fetch('/api/logs?lines=200');
+    const data = await r.json();
+    renderLogs(data.lines || []);
+  } catch (e) {}
+}
+
+function renderLogs(lines) {
+  const el = document.getElementById('terminal-output');
+  if (!el) return;
+  const wasAtBottom = el.scrollHeight - el.scrollTop - el.clientHeight < 40;
+  el.innerHTML = lines.map(line => {
+    let cls = 'log-info';
+    if (/\|\s*ERROR\s*\|/.test(line)) cls = 'log-error';
+    else if (/\|\s*WARNING\s*\|/.test(line)) cls = 'log-warn';
+    else if (/\|\s*DEBUG\s*\|/.test(line)) cls = 'log-debug';
+    const safe = line.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+    return `<div class="${cls}">${safe}</div>`;
+  }).join('');
+  if (wasAtBottom) el.scrollTop = el.scrollHeight;
+}
+
+function toggleTerminalPause() {
+  _terminalPaused = !_terminalPaused;
+  const btn = document.getElementById('btn-term-pause');
+  if (btn) btn.textContent = _terminalPaused ? '▶ Resume' : '⏸ Pause';
+}
+
+// ===== Log Level Toggle =====
+const _logLevels = ['DEBUG', 'INFO', 'WARNING'];
+let _currentLogLevel = 'INFO';
+
+async function loadLogLevel() {
+  try {
+    const r = await fetch('/api/log-level');
+    const data = await r.json();
+    _currentLogLevel = data.level || 'INFO';
+    updateLogLevelBtn();
+  } catch (e) {}
+}
+
+function updateLogLevelBtn() {
+  const btn = document.getElementById('btn-log-level');
+  if (!btn) return;
+  btn.textContent = _currentLogLevel;
+  if (_currentLogLevel === 'DEBUG') {
+    btn.style.color = '#bc8cff';
+    btn.style.borderColor = '#bc8cff';
+  } else if (_currentLogLevel === 'WARNING') {
+    btn.style.color = 'var(--yellow)';
+    btn.style.borderColor = 'var(--yellow)';
+  } else {
+    btn.style.color = 'var(--text-dim)';
+    btn.style.borderColor = 'var(--border)';
+  }
+}
+
+async function toggleLogLevel() {
+  const idx = _logLevels.indexOf(_currentLogLevel);
+  const next = _logLevels[(idx + 1) % _logLevels.length];
+  try {
+    const r = await fetch('/api/log-level', {
+      method: 'POST',
+      headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify({level: next})
+    });
+    const data = await r.json();
+    _currentLogLevel = data.level || next;
+    updateLogLevelBtn();
+  } catch (e) {}
+}
+
+loadLogLevel();
+fetchLogs();
+setInterval(fetchLogs, 3000);
+
+// ===== Init =====
+connectWS();
+loadConfig().then(() => loadSavedAssets());
+</script>
+</body>
+</html>

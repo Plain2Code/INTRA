@@ -1,0 +1,15 @@
+services:
+  intra:
+    build: .
+    restart: unless-stopped
+    env_file: .env
+    command: python main.py --live   # Live-Modus im Dashboard wählbar
+    ports:
+      - "8080:8080"    # Dashboard öffentlich erreichbar (Hetzner Firewall schützt)
+    volumes:
+      - ./trades.json:/app/trades.json  # Trade-History überlebt Neustarts
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "3"

@@ -1,0 +1,7 @@
+httpx[http2]>=0.27
+websockets>=13.0
+talipp>=2.5
+fastapi>=0.115
+uvicorn[standard]>=0.32
+python-dotenv>=1.0
+numpy>=1.26

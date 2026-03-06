@@ -1,0 +1,27 @@
+# Environment
+.env
+
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+dist/
+build/
+
+# Logs
+*.log
+intra.log
+
+# IDE
+.vscode/
+.idea/
+
+# Segments extension
+.segments/
+
+# User config
+active_assets.json
+
+# OS
+.DS_Store
+Thumbs.db
