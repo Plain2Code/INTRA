@@ -126,7 +126,7 @@ NOISE_MIN_BREAKOUT_ATR: float = 0.3   # min breakout beyond boundary in ATR unit
 BUFFER_DAILY: int = 30                 # daily candles to load (covers lookback + margin)
 
 # Trailing stop (minimum floor, stats engine may set wider)
-TRAILING_ACTIVATE_R: float = 1.0       # activate at +1.0R (no breakeven stage)
+TRAILING_ACTIVATE_R: float = 0.75      # activate at +0.75R (no breakeven stage)
 TRAILING_MIN_ATR_MULT: float = 1.2     # trail distance floor = 1.2 × ATR(1min) (must be < SL=1.5 ATR)
 
 # Hard SL sanity filter
@@ -150,7 +150,7 @@ CORRELATION_MATRIX: dict[str, dict[str, float]] = {
 MAX_DAILY_LOSS_PCT: float = 0.03       # 3% daily max drawdown
 MAX_CONSECUTIVE_SL_PER_EPIC: int = 3   # circuit breaker per instrument
 SPREAD_THRESHOLD_MULT: float = 1.5     # block if spread > 1.5× average
-RISK_PER_TRADE_PCT: float = 0.01       # base risk (overridden by Kelly when data available)
+RISK_PER_TRADE_PCT: float = 0.01       # base risk (overridden by Kelly when data available) --> 0.015 if balance under 2k
 MAX_KELLY_RISK_PCT: float = 0.03       # cap even if Kelly says more
 MIN_BOOTSTRAP_RISK_PCT: float = 0.005  # minimal risk during bootstrap / negative edge
 MAX_TRADE_LEVERAGE: float = 3.0        # max notional = balance × this
@@ -172,8 +172,8 @@ INSTRUMENT_MIN_SIZE: dict[str, float] = {
 }
 
 # Session window protection
-SESSION_NO_NEW_TRADE_OPEN_BUFFER: int = 10
-SESSION_NO_NEW_TRADE_BUFFER: int = 60
+SESSION_NO_NEW_TRADE_OPEN_BUFFER: int = 30
+SESSION_NO_NEW_TRADE_BUFFER: int = 30
 SESSION_FORCE_CLOSE_BUFFER: int = 5
 
 # Signal cooldowns

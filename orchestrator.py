@@ -162,9 +162,12 @@ class Orchestrator:
         positions = await self._client.get_positions()
         for pos in positions:
             if pos.epic in self._instruments:
+                sl_dist = abs(pos.open_level - pos.stop_level) if pos.stop_level else 0.0
                 self._open_positions[pos.epic] = PositionMeta(
                     position=pos,
-                    sl_distance=0.0,
+                    setup_type="noise_breakout",
+                    direction=pos.direction,
+                    sl_distance=sl_dist,
                 )
                 logger.info(
                     "Found existing position: %s %s size=%.2f SL=%.5f",
@@ -173,6 +176,10 @@ class Orchestrator:
 
         # 5. Initialize trade tracker (loads history + bootstraps stats)
         await self._tracker.initialize()
+
+        # 5b. Restore daily P&L and trade count from persisted trades
+        daily_pnl, daily_count = self._tracker.get_todays_summary()
+        self._state.restore_daily(daily_pnl, daily_count)
 
         # 6. Initialize news filter
         await self._news.initialize()
@@ -862,8 +869,8 @@ class Orchestrator:
                         tp_distance=meta.tp_distance,
                         volatility=meta.volatility,
                     )
-                except (ValueError, KeyError):
-                    pass
+                except (ValueError, KeyError) as e:
+                    logger.warning("Failed to record trade for %s: %s", epic, e)
 
             # Record in state manager (per-epic circuit breaker + global)
             self._state.record_trade(pnl, epic=epic, sl_distance=meta.sl_distance)

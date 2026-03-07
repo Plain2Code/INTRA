@@ -78,6 +78,14 @@ class StateManager:
         logger.info("State initialized: balance=%.2f, mode=%s",
                      balance, "LIVE" if is_live else "DEMO")
 
+    def restore_daily(self, pnl: float, trade_count: int):
+        """Restore daily P&L and trade count from persisted trades after restart."""
+        self._daily.daily_pnl = pnl
+        self._daily.daily_pnl_peak = max(pnl, 0.0)
+        self._daily.trade_count = trade_count
+        if pnl != 0 or trade_count != 0:
+            logger.info("Daily state restored: PnL=%.2f, trades=%d", pnl, trade_count)
+
     # ------------------------------------------------------------------
     # Daily reset
     # ------------------------------------------------------------------

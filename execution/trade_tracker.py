@@ -176,6 +176,17 @@ class TradeTracker:
             for t in reversed(trades)
         ]
 
+    def get_todays_summary(self) -> tuple[float, int]:
+        """Return (total_pnl, trade_count) for today's trades."""
+        today = datetime.now(timezone.utc).strftime("%Y-%m-%d")
+        total_pnl = 0.0
+        count = 0
+        for t in self._recent_trades:
+            if t.timestamp and t.timestamp[:10] == today:
+                total_pnl += t.pnl
+                count += 1
+        return total_pnl, count
+
     # ------------------------------------------------------------------
     # Persistence (backward compatible)
     # ------------------------------------------------------------------
@@ -254,8 +265,9 @@ class TradeTracker:
 
             logger.info("Loaded %d trades from trades.json", len(self._recent_trades))
 
-            # Also try loading rich stats from stats.json
-            self._stats.load()
+            # Bootstrap is the single source of truth (trades.json has all trades)
+            # Always save after bootstrap to keep stats.json in sync
+            self._stats.save()
 
         except (OSError, json.JSONDecodeError, KeyError, AttributeError) as e:
             logger.warning("Failed to load trades.json (starting fresh): %s", e)

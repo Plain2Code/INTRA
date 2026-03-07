@@ -713,7 +713,7 @@ function updateDashboard(d) {
   updateNewsEvents(d.news_events || [], epicCurrencies);
 
   // Equity Curve
-  drawEquityCurve(d.equity_history || []);
+  drawEquityCurve(d.equity_history || [], d.daily_pnl || 0);
 
   // Win Rates
   const wrByEpic = d.winrate_stats_by_epic || {};
@@ -991,7 +991,7 @@ function updateNewsEvents(events, epicCurrencies) {
 }
 
 // ===== Equity Curve =====
-function drawEquityCurve(history) {
+function drawEquityCurve(history, dailyPnl) {
   const canvas = document.getElementById('equity-chart');
   const ctx = canvas.getContext('2d');
   const w = canvas.width = canvas.offsetWidth * 2;
@@ -1032,9 +1032,9 @@ function drawEquityCurve(history) {
   }
   ctx.strokeStyle = lineColor; ctx.lineWidth = 2; ctx.stroke();
 
-  const diff = vals[vals.length-1] - vals[0];
-  label.textContent = fmt(vals[vals.length-1]) + ' (' + (diff >= 0 ? '+' : '') + fmt(diff) + ')';
-  label.className = 'stat-label ' + (diff >= 0 ? 'positive' : 'negative');
+  const pnlVal = dailyPnl || 0;
+  label.textContent = fmt(vals[vals.length-1]) + ' (' + (pnlVal >= 0 ? '+' : '') + fmt(pnlVal) + ')';
+  label.className = 'stat-label ' + (pnlVal >= 0 ? 'positive' : 'negative');
 }
 
 // ===== Helpers =====
