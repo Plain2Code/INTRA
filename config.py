@@ -110,8 +110,8 @@ BOOTSTRAP_MIN_TRADES: int = 20         # min trades before EV gate activates per
 KELLY_RAMP_START: int = 50             # min trades before Kelly sizing kicks in
 KELLY_RAMP_END: int = 100             # trades at which full half-Kelly is used
 PER_EPIC_MIN_TRADES: int = 5           # min trades before per-epic EV gate activates
-MIN_CONFIDENCE: float = 0.5           # min signal confidence to trade (0-1)
-BOOTSTRAP_MIN_CONFIDENCE: float = 0.5  # same as MIN_CONFIDENCE – bootstrap needs trades to build stats
+MIN_CONFIDENCE: float = 0.0           # disabled – trade all breakouts, confidence is informational only
+BOOTSTRAP_MIN_CONFIDENCE: float = 0.0  # disabled – trade all breakouts
 
 # SL multiplier (ATR-based, no fixed TP — exits via trailing/EOD)
 FALLBACK_SL_ATR_MULT: float = 1.5     # SL = 1.5 × ATR(15min)
@@ -150,7 +150,7 @@ CORRELATION_MATRIX: dict[str, dict[str, float]] = {
 MAX_DAILY_LOSS_PCT: float = 0.03       # 3% daily max drawdown
 MAX_CONSECUTIVE_SL_PER_EPIC: int = 3   # circuit breaker per instrument
 SPREAD_THRESHOLD_MULT: float = 1.5     # block if spread > 1.5× average
-RISK_PER_TRADE_PCT: float = 0.01       # base risk (overridden by Kelly when data available) --> 0.015 if balance under 2k
+RISK_PER_TRADE_PCT: float = 0.015      # base risk (overridden by Kelly when data available) -> use 1% for Balance over 2k
 MAX_KELLY_RISK_PCT: float = 0.03       # cap even if Kelly says more
 MIN_BOOTSTRAP_RISK_PCT: float = 0.005  # minimal risk during bootstrap / negative edge
 MAX_TRADE_LEVERAGE: float = 3.0        # max notional = balance × this
