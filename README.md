@@ -64,12 +64,6 @@ The system is split into independent modules, wired together by the orchestrator
 | `trade_tracker` | Trade recording, feeds StatisticsEngine |
 | `state_manager` | Daily P&L tracking, circuit breakers, kill switch |
 
-### Dashboard
-
-Single-page web interface via WebSocket. Shows account info, the asset pipeline per instrument, daily drawdown, market sessions, economic calendar, equity curve, win rates, recent trades, and a live log viewer.
-
-![Dashboard](ressources/asset_pipeline2.png)
-
 ---
 
 ## Orchestrator Pipeline
