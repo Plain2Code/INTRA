@@ -93,12 +93,7 @@ class OrderExecutor:
                     f"Order rejected: {confirmation.reason}"
                 )
 
-            logger.info(
-                "Order ACCEPTED: %s %s size=%.2f at %.2f, "
-                "SL=%.2f TP=%.2f dealId=%s",
-                epic, direction, size, confirmation.level,
-                sl_price, tp_price, confirmation.deal_id,
-            )
+            logger.debug("Order accepted: %s %s dealId=%s", epic, direction, confirmation.deal_id)
 
             return OrderResult(
                 success=True,
@@ -117,7 +112,7 @@ class OrderExecutor:
         try:
             success = await self._client.close_position(deal_id)
             if success:
-                logger.info("Position %s closed", deal_id)
+                logger.debug("Position %s closed", deal_id)
             return success
         except Exception as e:
             logger.error("Failed to close position %s: %s", deal_id, e)

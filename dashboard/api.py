@@ -14,9 +14,10 @@ import logging
 from pathlib import Path
 
 import uvicorn
-from fastapi import FastAPI, WebSocket, WebSocketDisconnect
+import secrets
+from fastapi import FastAPI, WebSocket, WebSocketDisconnect, Depends, HTTPException, status
 from fastapi.responses import HTMLResponse, FileResponse
-from fastapi.staticfiles import StaticFiles
+from fastapi.security import HTTPBasic, HTTPBasicCredentials
 from pydantic import BaseModel
 
 from orchestrator import Orchestrator
@@ -25,6 +26,28 @@ import config
 logger = logging.getLogger(__name__)
 
 app = FastAPI(title="INTRA Trading Bot Dashboard")
+
+# ---------------------------------------------------------------------------
+# Authentication
+# ---------------------------------------------------------------------------
+_DASH_USER = config.DASHBOARD_USER
+_DASH_PASS = config.DASHBOARD_PASSWORD
+
+security = HTTPBasic()
+
+
+def _check_auth(credentials: HTTPBasicCredentials = Depends(security)):
+    if not _DASH_PASS:
+        return  # no password set → open access (backward compat)
+    user_ok = secrets.compare_digest(credentials.username, _DASH_USER)
+    pass_ok = secrets.compare_digest(credentials.password, _DASH_PASS)
+    if not (user_ok and pass_ok):
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Invalid credentials",
+            headers={"WWW-Authenticate": "Basic"},
+        )
+
 
 # Global state
 _orchestrator: Orchestrator | None = None
@@ -87,7 +110,7 @@ def _format_session(inst: config.Instrument) -> str:
 # Routes
 # ---------------------------------------------------------------------------
 
-@app.get("/", response_class=HTMLResponse)
+@app.get("/", response_class=HTMLResponse, dependencies=[Depends(_check_auth)])
 async def index():
     html_path = STATIC_DIR / "index.html"
     if html_path.exists():
@@ -95,7 +118,7 @@ async def index():
     return HTMLResponse("<h1>INTRA Dashboard</h1><p>static/index.html not found</p>")
 
 
-@app.get("/api/status")
+@app.get("/api/status", dependencies=[Depends(_check_auth)])
 async def get_status():
     if _orchestrator:
         return _orchestrator.get_full_status()
@@ -129,7 +152,7 @@ async def get_status():
     }
 
 
-@app.get("/api/config")
+@app.get("/api/config", dependencies=[Depends(_check_auth)])
 async def get_config():
     """Return available instruments and settings for the UI."""
     return {
@@ -146,7 +169,7 @@ async def get_config():
     }
 
 
-@app.get("/api/active-assets")
+@app.get("/api/active-assets", dependencies=[Depends(_check_auth)])
 async def get_active_assets():
     """Load previously saved asset selection."""
     if ACTIVE_ASSETS_PATH.exists():
@@ -158,7 +181,7 @@ async def get_active_assets():
     return {"assets": []}
 
 
-@app.post("/api/active-assets")
+@app.post("/api/active-assets", dependencies=[Depends(_check_auth)])
 async def save_active_assets(req: SaveAssetsRequest):
     """Save selected assets to persistent config."""
     try:
@@ -168,7 +191,7 @@ async def save_active_assets(req: SaveAssetsRequest):
         return {"error": f"Failed to save: {e}"}
 
 
-@app.post("/api/start")
+@app.post("/api/start", dependencies=[Depends(_check_auth)])
 async def start_bot(req: StartRequest):
     """Start the trading bot with selected instruments."""
     global _orchestrator, _bot_task
@@ -203,7 +226,7 @@ async def _run_bot():
         await broadcast({"type": "error", "data": {"message": str(e)}})
 
 
-@app.post("/api/stop")
+@app.post("/api/stop", dependencies=[Depends(_check_auth)])
 async def stop_bot():
     if _orchestrator:
         await _orchestrator.stop()
@@ -211,7 +234,7 @@ async def stop_bot():
     return {"error": "Bot not running"}
 
 
-@app.post("/api/kill-switch")
+@app.post("/api/kill-switch", dependencies=[Depends(_check_auth)])
 async def kill_switch():
     if _orchestrator:
         await _orchestrator.kill_switch()
@@ -219,7 +242,7 @@ async def kill_switch():
     return {"error": "Bot not running"}
 
 
-@app.post("/api/restart")
+@app.post("/api/restart", dependencies=[Depends(_check_auth)])
 async def restart_bot(req: StartRequest):
     """Stop the current bot and start a new one with different settings."""
     global _orchestrator, _bot_task
@@ -241,7 +264,7 @@ async def restart_bot(req: StartRequest):
             "mode": "LIVE" if (req.live and _allow_live) else "DEMO"}
 
 
-@app.get("/api/log-level")
+@app.get("/api/log-level", dependencies=[Depends(_check_auth)])
 async def get_log_level():
     """Return the current root log level."""
     return {"level": logging.getLevelName(logging.getLogger().level)}
@@ -251,7 +274,7 @@ class LogLevelRequest(BaseModel):
     level: str
 
 
-@app.post("/api/log-level")
+@app.post("/api/log-level", dependencies=[Depends(_check_auth)])
 async def set_log_level(req: LogLevelRequest):
     """Change the root log level at runtime."""
     level_name = req.level.upper()
@@ -263,7 +286,7 @@ async def set_log_level(req: LogLevelRequest):
     return {"level": level_name}
 
 
-@app.get("/api/logs")
+@app.get("/api/logs", dependencies=[Depends(_check_auth)])
 async def get_logs(lines: int = 200):
     """Return the last N lines of intra.log."""
     log_path = Path("intra.log")
@@ -277,14 +300,14 @@ async def get_logs(lines: int = 200):
         return {"lines": []}
 
 
-@app.get("/api/trades")
+@app.get("/api/trades", dependencies=[Depends(_check_auth)])
 async def get_trades():
     if _orchestrator and _orchestrator._tracker:
         return {"trades": _orchestrator._tracker.get_recent_trades(50)}
     return {"trades": []}
 
 
-@app.get("/api/stats")
+@app.get("/api/stats", dependencies=[Depends(_check_auth)])
 async def get_stats():
     if _orchestrator and _orchestrator._tracker:
         return {"stats": _orchestrator._tracker.get_all_stats()}
@@ -295,7 +318,7 @@ async def get_stats():
 async def websocket_endpoint(ws: WebSocket):
     await ws.accept()
     _ws_clients.add(ws)
-    logger.info("Dashboard client connected (total: %d)", len(_ws_clients))
+    logger.debug("Dashboard client connected (total: %d)", len(_ws_clients))
 
     # Send initial status
     status = await get_status()
@@ -319,7 +342,7 @@ async def websocket_endpoint(ws: WebSocket):
         pass
     finally:
         _ws_clients.discard(ws)
-        logger.info("Dashboard client disconnected (total: %d)", len(_ws_clients))
+        logger.debug("Dashboard client disconnected (total: %d)", len(_ws_clients))
 
 
 # ---------------------------------------------------------------------------

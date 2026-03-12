@@ -124,15 +124,14 @@ class Orchestrator:
 
     async def start(self):
         """Full startup sequence."""
-        logger.info("=" * 60)
-        logger.info("INTRA Trading Bot starting...")
-        logger.info("Mode: %s", "LIVE" if self._is_live else "DEMO")
-        logger.info("Instruments: %s", self._instruments)
-        logger.info("=" * 60)
+        logger.info(
+            "INTRA Bot starting | Mode: %s | Instruments: %s",
+            "LIVE" if self._is_live else "DEMO", self._instruments,
+        )
 
         # 1. Login
         account = await self._client.login()
-        logger.info("Account: %s, Balance: %.2f %s",
+        logger.info("Account: %s | Balance: %.2f %s",
                      account.account_id, account.balance, account.currency)
 
         # 2. Initialize state
@@ -146,16 +145,15 @@ class Orchestrator:
             try:
                 details = await self._client.get_market_details(epic)
                 if details:
-                    name = details.get("instrument", {}).get("name", epic)
-                    logger.info("Verified epic: %s (%s)", epic, name)
                     verified.append(epic)
                 else:
-                    logger.warning("Epic not found or unavailable: %s (skipping)", epic)
+                    logger.warning("Epic unavailable: %s (skipping)", epic)
             except Exception as e:
-                logger.warning("Failed to verify epic %s: %s (skipping)", epic, e)
+                logger.warning("Failed to verify %s: %s (skipping)", epic, e)
         self._instruments = verified
         if not self._instruments:
             raise RuntimeError("No valid instruments after verification")
+        logger.info("Instruments verified: %s", verified)
         self._state.set_instruments(self._instruments)
 
         # 4. Check existing positions
@@ -163,11 +161,20 @@ class Orchestrator:
         for pos in positions:
             if pos.epic in self._instruments:
                 sl_dist = abs(pos.open_level - pos.stop_level) if pos.stop_level else 0.0
+                # Estimate entry ATR from SL distance (SL = FALLBACK_SL_ATR_MULT * ATR)
+                est_atr = sl_dist / config.FALLBACK_SL_ATR_MULT if sl_dist > 0 else 0.0
+                # Estimate TP distance from broker's profit_level, or fallback to 10x ATR
+                if pos.profit_level and pos.open_level:
+                    tp_dist = abs(pos.profit_level - pos.open_level)
+                else:
+                    tp_dist = est_atr * 10.0
                 self._open_positions[pos.epic] = PositionMeta(
                     position=pos,
                     setup_type="noise_breakout",
                     direction=pos.direction,
                     sl_distance=sl_dist,
+                    entry_atr=est_atr,
+                    tp_distance=tp_dist,
                 )
                 logger.info(
                     "Found existing position: %s %s size=%.2f SL=%.5f",
@@ -206,23 +213,9 @@ class Orchestrator:
             engine = self._engines.get(epic)
             if engine:
                 snap = engine.get_15min_snapshot()
-
-                diag_keys = ["ready", "adx", "ema_9", "ema_21", "atr", "atr_avg"]
-                diag = {k: snap.get(k) for k in diag_keys}
-                none_keys = [k for k in diag_keys if snap.get(k) is None and k != "ready"]
-                logger.info(
-                    "Snapshot for %s: %s%s",
-                    epic, diag,
-                    f" — MISSING: {none_keys}" if none_keys else " — all indicators OK",
-                )
-
                 result = classify_bias(snap)
                 self._state.set_bias(epic, result)
-                logger.info(
-                    "Initial bias for %s: %s (vol=%s, TQ=%.2f) – %s",
-                    epic, result.bias.value, result.volatility,
-                    result.trend_quality, result.details,
-                )
+                logger.debug("Initial bias %s: %s vol=%s", epic, result.bias.value, result.volatility)
 
         # 10. Initialize pipeline matrix with startup data
         for epic in self._instruments:
@@ -237,13 +230,23 @@ class Orchestrator:
                     total_open_positions=len(self._open_positions),
                 ),
                 "bias": bias.bias.value,
-                "bias_ok": bias.bias != MarketBias.BLOCKED,
+                "bias_label": (
+                    "Trending Up" if bias.bias == MarketBias.BULLISH else
+                    "Trending Down" if bias.bias == MarketBias.BEARISH else
+                    "Ranging"
+                ),
                 "volatility": bias.volatility,
+                "volume_pressure": bias.volume_pressure,
+                "trend_quality": round(bias.trend_quality, 2),
+                "setup_scan": None,
+                "noise_zone": {},
+                "indicators": {},
+                "validation": {},
                 "setup": None,
                 "setup_details": [],
                 "ev": None,
                 "ev_ok": False,
-                "blocked_at": "setup" if bias.bias != MarketBias.BLOCKED else "bias",
+                "blocked_at": "setup",
             }
 
         # 11. Set callbacks
@@ -292,11 +295,7 @@ class Orchestrator:
 
         result = classify_bias(snapshot)
         self._state.set_bias(epic, result)
-        logger.info(
-            "[15min] %s Bias: %s (vol=%s, ADX=%.1f, TQ=%.2f, VP=%s) – %s",
-            epic, result.bias.value, result.volatility, result.adx,
-            result.trend_quality, result.volume_pressure, result.details,
-        )
+        logger.debug("[15min] %s bias=%s vol=%s ADX=%.1f", epic, result.bias.value, result.volatility, result.adx)
         self._broadcast_status()
 
     async def _on_1min_candle(self, epic: str, candle: OHLCVCandle):
@@ -328,6 +327,18 @@ class Orchestrator:
         total_open = len(self._open_positions)
 
         # --- Pipeline status tracking (always runs, for dashboard matrix) ---
+        # --- Bias (informational only, does not block) ---
+        bias_result = self._state.get_bias(epic)
+
+        # --- Always scan signal conditions for dashboard ---
+        scan = scan_all_conditions(snapshot_1min, candle.close)
+
+        # --- Always compute validation preview ---
+        atr_15 = engine.atr_15min or 0.0
+        validation_preview = self._compute_validation_preview(
+            epic, atr_15, candle.close, spread, snapshot_1min,
+        )
+
         pipeline = {
             "constraints": self._constraints.check_all_detailed(
                 epic=epic,
@@ -336,9 +347,35 @@ class Orchestrator:
                 has_open_position=(epic in self._open_positions),
                 total_open_positions=total_open,
             ),
-            "bias": None,
-            "bias_ok": False,
-            "volatility": None,
+            "bias": bias_result.bias.value,
+            "bias_label": (
+                "Trending Up" if bias_result.bias == MarketBias.BULLISH else
+                "Trending Down" if bias_result.bias == MarketBias.BEARISH else
+                "Ranging"
+            ),
+            "volatility": bias_result.volatility,
+            "volume_pressure": bias_result.volume_pressure,
+            "trend_quality": round(bias_result.trend_quality, 2),
+            "setup_scan": scan,
+            "noise_zone": {
+                "upper": snapshot_1min.get("noise_upper"),
+                "lower": snapshot_1min.get("noise_lower"),
+                "width": snapshot_1min.get("noise_boundary_width"),
+                "daily_open": snapshot_1min.get("daily_open"),
+                "price": candle.close,
+            },
+            "indicators": {
+                "atr": round(snapshot_1min.get("atr") or 0, 2),
+                "atr_avg": round(snapshot_1min.get("atr_avg") or 0, 2),
+                "atr_15": round(atr_15, 2),
+                "rsi": round(snapshot_1min.get("rsi") or 0, 1),
+                "adx": round(snapshot_1min.get("adx") or 0, 1),
+                "adx_median": round(snapshot_1min.get("adx_median") or 0, 1),
+                "macd_hist": round(snapshot_1min.get("macd_hist") or 0, 4),
+                "volume_ratio": round(snapshot_1min.get("volume_ma_ratio") or 0, 2),
+                "kurtosis": round(snapshot_1min.get("return_kurtosis") or 0, 1),
+            },
+            "validation": validation_preview,
             "setup": None,
             "setup_details": [],
             "ev": None,
@@ -346,7 +383,7 @@ class Orchestrator:
             "blocked_at": None,
         }
 
-        # --- SCHICHT 4: Pre-checks ---
+        # --- Pre-checks ---
         constraint = self._constraints.check_all(
             epic=epic,
             current_spread=spread,
@@ -367,13 +404,7 @@ class Orchestrator:
             self._pipeline_status[epic] = pipeline
             return
 
-        # --- SCHICHT 1: Market Bias (from 15min) ---
-        bias_result = self._state.get_bias(epic)
-        pipeline["bias"] = bias_result.bias.value
-        pipeline["bias_ok"] = bias_result.bias != MarketBias.BLOCKED
-        pipeline["volatility"] = bias_result.volatility
-
-        # --- SCHICHT 2: Signal detection (1min) ---
+        # --- Signal detection (1min) ---
         # Noise Breakout only fires at :00 and :30
         minute = candle.timestamp.minute
         is_noise_check_time = minute in config.NOISE_CHECK_MINUTES
@@ -389,10 +420,6 @@ class Orchestrator:
                 nb_lower or 0, nb_upper or 0, nb_width or 0,
                 f"→ BREAKOUT {setup.setup_type.value} {setup.direction.value}" if setup else "→ INSIDE",
             )
-
-        # Always scan conditions for pipeline matrix
-        scan = scan_all_conditions(snapshot_1min, candle.close)
-        pipeline["setup_scan"] = scan
 
         if setup is None:
             pipeline["setup"] = "no_signal"
@@ -426,8 +453,8 @@ class Orchestrator:
         if self._open_positions:
             eff_count = self._stats.effective_position_count(self._open_positions)
             if eff_count >= config.MAX_CORRELATED_EXPOSURE:
-                logger.info(
-                    "[1min] %s SKIP: correlated exposure limit (%.1f effective positions >= %.1f)",
+                logger.debug(
+                    "[1min] %s SKIP: correlated exposure (%.1f >= %.1f)",
                     epic, eff_count, config.MAX_CORRELATED_EXPOSURE,
                 )
                 pipeline["blocked_at"] = "correlation_limit"
@@ -442,11 +469,8 @@ class Orchestrator:
         pipeline["setup_details"] = setup.details
 
         logger.info(
-            "[1min] %s SETUP: %s %s conf=%.2f bias=%s VP=%s TQ=%.2f | %s",
-            epic, setup.setup_type.value, setup.direction.value,
-            setup.confidence, bias_result.bias.value,
-            bias_result.volume_pressure, bias_result.trend_quality,
-            " | ".join(setup.details),
+            "SETUP: %s %s %s conf=%.2f",
+            epic, setup.setup_type.value, setup.direction.value, setup.confidence,
         )
 
         # --- SCHICHT 3: Trade validation (15min ATR for SL) ---
@@ -511,6 +535,76 @@ class Orchestrator:
         )
 
     # ------------------------------------------------------------------
+    # Validation preview (always computed for dashboard)
+    # ------------------------------------------------------------------
+
+    def _compute_validation_preview(
+        self, epic: str, atr_15: float, price: float,
+        spread: float, snapshot: dict,
+    ) -> dict:
+        """Compute what SL/size/risk would be if a trade fired now."""
+        if atr_15 <= 0 or price <= 0:
+            return {}
+
+        # SL distance (same logic as trade_validator)
+        sl_dist = atr_15 * config.FALLBACK_SL_ATR_MULT
+        kurtosis = snapshot.get("return_kurtosis", 3.0) or 3.0
+        if kurtosis > 3.0:
+            sl_dist *= 1 + (kurtosis - 3) * 0.1
+        atr_avg = snapshot.get("atr_avg")
+        if atr_avg and atr_avg > 0:
+            sl_dist *= max(0.7, min(1.5, atr_15 / atr_avg))
+
+        # Position sizing preview
+        balance = self._state.balance or 0
+        risk_pct = config.RISK_PER_TRADE_PCT
+        if self._stats:
+            risk_pct = self._stats.get_risk_pct("noise_breakout")
+        risk_eur = balance * risk_pct if balance > 0 else 0
+        size = risk_eur / sl_dist if sl_dist > 0 else 0
+        instrument_min = config.INSTRUMENT_MIN_SIZE.get(epic, 0.01)
+        size = round(max(size, 0), 2)
+        size_ok = size >= instrument_min
+
+        # TP distance (safety net)
+        tp_dist = atr_15 * 10.0
+
+        # RRR
+        rrr = tp_dist / sl_dist if sl_dist > 0 else 0
+
+        # Effective risk (what you'd actually lose)
+        eff_size = max(size, instrument_min) if size > 0 else instrument_min
+        sl_eur = eff_size * sl_dist
+        tp_eur = eff_size * tp_dist
+
+        # Trailing activation
+        trail_r = config.TRAILING_ACTIVATE_R
+        trail_eur = sl_eur * trail_r
+
+        # EV from stats
+        ev = 0.0
+        if self._stats:
+            s = self._stats.get_stats("noise_breakout")
+            ev = s.expected_value
+
+        return {
+            "sl_dist": round(sl_dist, 1),
+            "tp_dist": round(tp_dist, 1),
+            "sl_eur": round(sl_eur, 2),
+            "tp_eur": round(tp_eur, 2),
+            "trail_eur": round(trail_eur, 2),
+            "size": size,
+            "size_min": instrument_min,
+            "size_ok": size_ok,
+            "risk_pct": round(risk_pct * 100, 2),
+            "risk_eur": round(risk_eur, 2),
+            "rrr": round(rrr, 2),
+            "ev": round(ev, 2),
+            "spread": round(spread, 2),
+            "spread_ok": sl_dist >= spread * config.MIN_SL_SPREAD_MULT if spread > 0 else True,
+        }
+
+    # ------------------------------------------------------------------
     # Signal cooldown
     # ------------------------------------------------------------------
 
@@ -553,19 +647,13 @@ class Orchestrator:
         )
 
         if pos_size.skip:
-            logger.info(
-                "[%s] Trade skipped: effective risk %.2f EUR too small after leverage cap",
-                epic, pos_size.effective_risk,
-            )
+            logger.debug("[%s] Skip: risk too small after leverage cap", epic)
             return
 
         # Check Capital.com minimum deal size
         instrument_min = config.INSTRUMENT_MIN_SIZE.get(epic, 0.01)
         if pos_size.size < instrument_min:
-            logger.info(
-                "[%s] Trade skipped: size=%.2f below instrument minimum=%.2f",
-                epic, pos_size.size, instrument_min,
-            )
+            logger.debug("[%s] Skip: size=%.2f < min=%.2f", epic, pos_size.size, instrument_min)
             return
 
         order = await self._executor.open_trade(
@@ -604,18 +692,11 @@ class Orchestrator:
             self._record_signal_cooldown(epic, setup.setup_type)
             self._last_trade_opened_at = datetime.now(timezone.utc)
 
-            is_lowprice = ev_result.entry_price < 200
-            sl_fmt = f"{ev_result.sl_price:.5f}" if is_lowprice else f"{ev_result.sl_price:.2f}"
-            tp_fmt = f"{ev_result.tp_price:.5f}" if is_lowprice else f"{ev_result.tp_price:.2f}"
-            winrate = self._tracker.get_winrate(setup.setup_type)
-            ev = self._stats.get_ev(setup.setup_type.value)
-            kelly = self._stats.get_kelly_fraction(setup.setup_type.value)
+            sl_fmt = f"{ev_result.sl_price:.2f}"
             logger.info(
-                "TRADE OPENED: %s %s size=%.2f SL=%s TP=%s RRR=%.2f "
-                "conf=%.2f WR=%.2f EV=%.2f Kelly=%.3f",
+                "TRADE OPENED: %s %s size=%.2f entry=%.2f SL=%s risk=%.2f€",
                 epic, setup.direction.value, pos_size.size,
-                sl_fmt, tp_fmt, ev_result.rrr,
-                setup.confidence, winrate, ev, kelly,
+                order.level, sl_fmt, pos_size.effective_risk,
             )
             self._order_reject_count[epic] = 0
             self._broadcast_status()
@@ -783,7 +864,7 @@ class Orchestrator:
         if meta is None:
             return
 
-        logger.info("Position closed detected for %s", epic)
+        logger.debug("Position closure detected for %s, fetching transaction...", epic)
 
         try:
             # Capital.com can take a few seconds to register the transaction
@@ -800,13 +881,6 @@ class Orchestrator:
 
             if transactions:
                 sorted_txns = sorted(transactions, key=lambda t: t.date, reverse=True)
-
-                for i, t in enumerate(sorted_txns[:5]):
-                    logger.info(
-                        "Transaction[%d]: type=%s deal_id=%s instrument=%s pnl=%.2f date=%s",
-                        i, t.transaction_type, t.deal_id, t.instrument_name,
-                        t.profit_loss, t.date,
-                    )
 
                 match = None
                 deal_id = meta.position.deal_id
@@ -829,10 +903,6 @@ class Orchestrator:
                 if match is not None:
                     pnl = match.profit_loss
                     exit_price = match.close_level or exit_price
-                    logger.info(
-                        "PnL from transaction API for %s: %.2f (type=%s, ref=%s)",
-                        epic, pnl, match.transaction_type, match.reference,
-                    )
                 else:
                     logger.warning(
                         "No matching transaction found for %s (deal_id=%s) "
@@ -891,28 +961,11 @@ class Orchestrator:
     def _determine_exit_reason(self, meta: PositionMeta, pnl: float) -> str:
         """Infer exit reason from position metadata and P&L."""
         pos = meta.position
-        held_minutes = (datetime.now(timezone.utc) - meta.opened_at).total_seconds() / 60
 
         # Check EOD (session close buffer)
         remaining = RiskConstraints.minutes_to_session_close(pos.epic)
         if remaining is not None and remaining <= config.SESSION_FORCE_CLOSE_BUFFER + 2:
             return "eod"
-
-        # Check time exits
-        optimal_hold = self._stats.get_optimal_hold_minutes(meta.setup_type)
-        dead_threshold = max(optimal_hold * 2, config.TIME_EXIT_DEAD_MINUTES_FLOOR)
-        hard_max = max(optimal_hold * 3, config.TIME_EXIT_MAX_MINUTES_FLOOR)
-
-        if meta.sl_distance > 0 and pos.size > 0:
-            one_r = meta.sl_distance * pos.size
-            r_multiple = pnl / one_r if one_r > 0 else 0
-        else:
-            r_multiple = 0
-
-        if held_minutes >= hard_max:
-            return "time_max"
-        if held_minutes >= dead_threshold and abs(r_multiple) < config.TIME_EXIT_DEAD_R:
-            return "time_dead"
 
         # Check trailing stop
         if meta.trailing_set:
@@ -955,18 +1008,41 @@ class Orchestrator:
         # Multi-position: dict of epic -> position info
         positions_dict = {}
         for epic, meta in self._open_positions.items():
+            pos = meta.position
+            size = pos.size or 0
+            sl_dist = meta.sl_distance
+            tp_dist = meta.tp_distance
+            # PnL at SL/TP/TSL levels
+            sl_pnl = -sl_dist * size if sl_dist > 0 else 0
+            tp_pnl = tp_dist * size if tp_dist > 0 else 0
+            tsl_pnl = 0.0
+            if meta.trailing_set and pos.stop_level and pos.open_level:
+                if pos.direction == "BUY":
+                    tsl_pnl = (pos.stop_level - pos.open_level) * size
+                else:
+                    tsl_pnl = (pos.open_level - pos.stop_level) * size
+            # R-multiple
+            one_r = sl_dist * size if sl_dist > 0 else 1
+            r_multiple = (pos.profit_loss or 0) / one_r if one_r > 0 else 0
+
             positions_dict[epic] = {
-                "deal_id": meta.position.deal_id,
-                "epic": meta.position.epic,
-                "direction": meta.position.direction,
-                "size": meta.position.size,
-                "open_level": meta.position.open_level,
-                "current_level": meta.position.current_level,
-                "stop_level": meta.position.stop_level,
-                "profit_level": meta.position.profit_level,
-                "trailing_stop": meta.position.trailing_stop,
-                "trailing_stop_distance": meta.position.trailing_stop_distance,
-                "pnl": meta.position.profit_loss,
+                "deal_id": pos.deal_id,
+                "epic": pos.epic,
+                "direction": pos.direction,
+                "size": pos.size,
+                "open_level": pos.open_level,
+                "current_level": pos.current_level,
+                "stop_level": pos.stop_level,
+                "profit_level": pos.profit_level,
+                "trailing_stop": pos.trailing_stop,
+                "trailing_stop_distance": pos.trailing_stop_distance,
+                "pnl": pos.profit_loss,
+                "r_multiple": round(r_multiple, 2),
+                "sl_pnl": round(sl_pnl, 2),
+                "tp_pnl": round(tp_pnl, 2),
+                "tsl_pnl": round(tsl_pnl, 2),
+                "sl_distance": round(sl_dist, 2),
+                "tp_distance": round(tp_dist, 2),
                 "setup_type": meta.setup_type,
                 "trailing_set": meta.trailing_set,
                 "confidence": meta.confidence,

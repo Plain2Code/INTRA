@@ -129,22 +129,11 @@ def validate_trade(
 
     if stats is not None and stats.get_total_trades(setup_type) >= config.BOOTSTRAP_MIN_TRADES:
         s = stats.get_stats(setup_type)
-        logger.info(
-            "EV PASS: %s EV=%.2f WR=%.0f%% AvgW=%.2f AvgL=%.2f PF=%.2f",
-            setup_type, s.expected_value, s.winrate * 100,
-            s.avg_win, s.avg_loss, s.profit_factor,
-        )
+        logger.debug("EV PASS: %s EV=%.2f WR=%.0f%%", setup_type, s.expected_value, s.winrate * 100)
 
     # --- All checks passed ---
-    is_lowprice = current_price < 200
-    logger.info(
-        "TRADE VALID: %s %s conf=%.2f SL=%s spread=%s vol=%s",
-        setup.setup_type.value, setup.direction.value,
-        setup.confidence,
-        f"{sl_price:.5f}" if is_lowprice else f"{sl_price:.2f}",
-        f"{spread:.5f}" if is_lowprice else f"{spread:.2f}",
-        volatility,
-    )
+    logger.debug("Validation passed: %s %s SL=%.2f spread=%.4f",
+                 setup.setup_type.value, setup.direction.value, sl_price, spread)
 
     return TradeSetup(
         sl_price=sl_price, tp_price=tp_price,

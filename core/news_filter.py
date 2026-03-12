@@ -31,21 +31,11 @@ FF_URLS = [
 
 # Map our instrument epics to the currency codes that affect them
 EPIC_CURRENCIES: dict[str, list[str]] = {
-    # Indices
     "US100": ["USD"],
+    "US500": ["USD"],
     "DE40":  ["EUR"],
+    "FR40":  ["EUR"],
     "UK100": ["GBP"],
-    # Commodities
-    "GOLD":    ["USD"],
-    "SILVER":  ["USD"],
-    # Crypto (priced in USD)
-    "BTCUSD": ["USD"],
-    # Stocks (USD-denominated)
-    "AAPL":  ["USD"],
-    "TSLA":  ["USD"],
-    "NVDA":  ["USD"],
-    "AMZN":  ["USD"],
-    "MSFT":  ["USD"],
 }
 
 
@@ -82,7 +72,7 @@ class NewsFilter:
         await self._fetch_events()
         # Retry once on failure with delay (e.g. rate limit or transient error)
         if not self._events and self._fetch_failures > 0:
-            logger.info("Retrying news fetch after 5s delay...")
+            logger.debug("Retrying news fetch after 5s delay...")
             await asyncio.sleep(5)
             await self._fetch_events()
 
@@ -93,7 +83,7 @@ class NewsFilter:
             return
         elapsed = (datetime.now(timezone.utc) - self._last_fetch).total_seconds() / 3600
         if elapsed >= config.NEWS_REFRESH_HOURS:
-            logger.info("News calendar refresh (%.1fh since last fetch)", elapsed)
+            logger.debug("News calendar refresh (%.1fh since last fetch)", elapsed)
             await self._fetch_events()
 
     async def _fetch_events(self):
@@ -141,10 +131,7 @@ class NewsFilter:
 
             high_count = sum(1 for e in self._events if e.impact == "High")
             med_count = sum(1 for e in self._events if e.impact == "Medium")
-            logger.info(
-                "NewsFilter loaded %d events (%d High, %d Medium)",
-                len(self._events), high_count, med_count,
-            )
+            logger.debug("News calendar: %d events (%d High, %d Medium)", len(self._events), high_count, med_count)
 
     @staticmethod
     def _parse_event(item: dict) -> NewsEvent | None:

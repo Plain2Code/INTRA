@@ -75,8 +75,7 @@ class StateManager:
         self._current_balance = balance
         self._current_equity = balance
         self._is_live = is_live
-        logger.info("State initialized: balance=%.2f, mode=%s",
-                     balance, "LIVE" if is_live else "DEMO")
+        logger.debug("State initialized: balance=%.2f mode=%s", balance, "LIVE" if is_live else "DEMO")
 
     def restore_daily(self, pnl: float, trade_count: int):
         """Restore daily P&L and trade count from persisted trades after restart."""
@@ -84,7 +83,7 @@ class StateManager:
         self._daily.daily_pnl_peak = max(pnl, 0.0)
         self._daily.trade_count = trade_count
         if pnl != 0 or trade_count != 0:
-            logger.info("Daily state restored: PnL=%.2f, trades=%d", pnl, trade_count)
+            logger.debug("Daily state restored: PnL=%.2f trades=%d", pnl, trade_count)
 
     # ------------------------------------------------------------------
     # Daily reset
@@ -120,7 +119,7 @@ class StateManager:
             self._daily.daily_pnl_peak = self._daily.daily_pnl
         self._daily.trade_count += 1
         dd = self._daily.daily_pnl_peak - self._daily.daily_pnl
-        logger.info("Trade recorded: %+.2f (daily PnL: %+.2f, peak: %+.2f, drawdown: %.2f, trades: %d)",
+        logger.debug("State: trade %+.2f → daily PnL: %+.2f (peak: %+.2f, dd: %.2f, #%d)",
                      pnl, self._daily.daily_pnl, self._daily.daily_pnl_peak, dd, self._daily.trade_count)
 
         # Scratch zone: tiny PnL is noise, skip streak tracking
@@ -132,19 +131,18 @@ class StateManager:
         # Global consecutive loss tracking (for adaptive risk)
         if pnl < 0:
             self._consecutive_losses += 1
-            logger.info("Consecutive losses: %d", self._consecutive_losses)
+            logger.debug("Consecutive losses: %d", self._consecutive_losses)
         else:
             if self._consecutive_losses > 0:
-                logger.info("Win streak started – consecutive losses reset from %d",
-                            self._consecutive_losses)
+                logger.debug("Loss streak reset from %d", self._consecutive_losses)
             self._consecutive_losses = 0
 
         if epic is not None:
             if pnl < 0:
                 count = self._epic_consecutive_sl.get(epic, 0) + 1
                 self._epic_consecutive_sl[epic] = count
-                logger.info("Consecutive SL for %s: %d/%d",
-                            epic, count, config.MAX_CONSECUTIVE_SL_PER_EPIC)
+                logger.debug("Consecutive SL for %s: %d/%d",
+                             epic, count, config.MAX_CONSECUTIVE_SL_PER_EPIC)
                 if count >= config.MAX_CONSECUTIVE_SL_PER_EPIC:
                     self._epic_paused.add(epic)
                     logger.warning(
@@ -224,8 +222,7 @@ class StateManager:
     def set_bias(self, epic: str, bias_result: BiasResult):
         prev = self._biases.get(epic)
         if prev is None or prev.bias != bias_result.bias:
-            logger.info("Bias changed for %s to %s – %s",
-                        epic, bias_result.bias.value, bias_result.details)
+            logger.debug("Bias changed %s → %s", epic, bias_result.bias.value)
         self._biases[epic] = bias_result
 
     def get_bias(self, epic: str) -> BiasResult:

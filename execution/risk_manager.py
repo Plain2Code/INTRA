@@ -70,11 +70,7 @@ def calculate_position_size(
         if eff_positions >= 2.0:
             scale = 2.0 / eff_positions
             risk_pct *= scale
-            logger.info(
-                "Correlation adjustment: %.1f effective positions → "
-                "risk scaled to %.2f%%",
-                eff_positions, risk_pct * 100,
-            )
+            logger.debug("Correlation adj: %.1f eff pos → risk=%.2f%%", eff_positions, risk_pct * 100)
 
     risk_amount = balance * risk_pct
     raw_size = risk_amount / sl_distance
@@ -101,25 +97,11 @@ def calculate_position_size(
     skip = was_capped and effective_risk < min_effective
 
     if skip:
-        logger.info(
-            "Position SKIP: leverage cap reduces risk %.2f EUR (%.1f%%) "
-            "below min %.2f EUR – trade not worthwhile",
-            effective_risk, effective_risk_pct * 100, min_effective,
-        )
+        logger.debug("Position SKIP: risk %.2f€ below min %.2f€", effective_risk, min_effective)
     elif was_capped:
-        logger.info(
-            "Position capped: size %.0f → %.2f, effective risk %.2f EUR "
-            "(%.1f%%, target %.1f%%)",
-            raw_size, size, effective_risk, effective_risk_pct * 100,
-            risk_pct * 100,
-        )
+        logger.debug("Position capped: size %.2f, risk %.2f€ (%.1f%%)", size, effective_risk, effective_risk_pct * 100)
 
-    logger.info(
-        "Position sizing: balance=%.2f, risk=%.2f%% (%.2f EUR), "
-        "SL_dist=%.5f → size=%.2f, eff_risk=%.2f EUR (%.2f%%)",
-        balance, risk_pct * 100, risk_amount,
-        sl_distance, size, effective_risk, effective_risk_pct * 100,
-    )
+    logger.debug("Sizing: size=%.2f risk=%.2f€ (%.2f%%)", size, effective_risk, effective_risk_pct * 100)
 
     return PositionSize(
         size=size,

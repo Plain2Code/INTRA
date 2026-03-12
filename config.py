@@ -196,6 +196,8 @@ POLL_POSITIONS_INTERVAL: float = 2.0
 # ---------------------------------------------------------------------------
 DASHBOARD_HOST: str = os.getenv("DASHBOARD_HOST", "127.0.0.1")
 DASHBOARD_PORT: int = 8080
+DASHBOARD_USER: str = os.getenv("DASHBOARD_USER", "admin")
+DASHBOARD_PASSWORD: str = os.getenv("DASHBOARD_PASSWORD", "")
 
 # ---------------------------------------------------------------------------
 # Logging

@@ -323,12 +323,8 @@ class StatisticsEngine:
 
         # Log updated stats
         s = self._stats[setup_type]
-        logger.info(
-            "STATS [%s]: WR=%.0f%% (%d/%d) EV=%.2f PF=%.2f Kelly=%.3f AvgW=%.2f AvgL=%.2f",
-            setup_type, s.winrate * 100, s.wins, s.total,
-            s.expected_value, s.profit_factor, s.kelly_fraction,
-            s.avg_win, s.avg_loss,
-        )
+        logger.debug("STATS [%s]: WR=%.0f%% (%d/%d) EV=%.2f PF=%.2f",
+                     setup_type, s.winrate * 100, s.wins, s.total, s.expected_value, s.profit_factor)
 
     def update_correlation(self, epic: str, ret: float):
         """Feed per-candle return to correlation tracker."""
@@ -379,11 +375,7 @@ class StatisticsEngine:
             if epic_stats.total >= config.PER_EPIC_MIN_TRADES:
                 decision = epic_stats.expected_value > 0
                 if not decision:
-                    logger.info(
-                        "EV BLOCK [%s:%s]: per-epic EV=%.2f (%d trades, WR=%.0f%%)",
-                        setup_type, epic, epic_stats.expected_value,
-                        epic_stats.total, epic_stats.winrate * 100,
-                    )
+                    logger.debug("EV BLOCK [%s:%s]: EV=%.2f", setup_type, epic, epic_stats.expected_value)
                 return decision
 
         # Fallback to global stats
@@ -492,18 +484,7 @@ class StatisticsEngine:
                 data = json.load(f)
             for key, d in data.items():
                 self._stats[key] = TradeStatistics.from_dict(d)
-            logger.info(
-                "Loaded stats for %d buckets from stats.json",
-                len(self._stats),
-            )
-            # Log summary
-            for key, s in self._stats.items():
-                if ":" not in key:
-                    logger.info(
-                        "  %s: WR=%.0f%% (%d trades) EV=%.2f PF=%.2f Kelly=%.3f",
-                        key, s.winrate * 100, s.total,
-                        s.expected_value, s.profit_factor, s.kelly_fraction,
-                    )
+            logger.debug("Loaded stats for %d buckets from stats.json", len(self._stats))
         except (OSError, json.JSONDecodeError, KeyError) as e:
             logger.warning("Failed to load stats.json (starting fresh): %s", e)
 

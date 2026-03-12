@@ -75,11 +75,7 @@ class TradeTracker:
                 1 for t in transactions
                 if t.transaction_type in ("TRADE", "ORDER")
             )
-            logger.info(
-                "Capital.com: %d trades in last 7 days; "
-                "local history: %d trades loaded from trades.json",
-                trade_count, len(self._recent_trades),
-            )
+            logger.debug("Capital.com: %d trades (7d), local: %d trades", trade_count, len(self._recent_trades))
         except Exception as e:
             logger.warning("Failed to load Capital.com trade history: %s", e)
 
@@ -138,12 +134,7 @@ class TradeTracker:
         self._save()
         self._stats.save()
 
-        logger.info(
-            "Trade recorded: %s %s %s PnL=%.2f (%s) hold=%.0fmin exit=%s conf=%.2f",
-            epic, setup_type.value, direction.value,
-            pnl, "WIN" if is_win else "LOSS",
-            hold_minutes, exit_reason, confidence,
-        )
+        logger.debug("Trade saved: %s %s PnL=%.2f", epic, setup_type.value, pnl)
 
     def get_winrate(self, setup_type: SetupType) -> float:
         """Get current win rate for a setup type."""
@@ -263,7 +254,7 @@ class TradeTracker:
                     tp_distance=trade.tp_distance,
                 )
 
-            logger.info("Loaded %d trades from trades.json", len(self._recent_trades))
+            logger.debug("Loaded %d trades from trades.json", len(self._recent_trades))
 
             # Bootstrap is the single source of truth (trades.json has all trades)
             # Always save after bootstrap to keep stats.json in sync

@@ -805,13 +805,9 @@ class FeatureEngine:
         """Initialize indicator suites with historical data."""
         if candles_1min:
             self._suite_1min = IndicatorSuite(candles_1min, is_15min=False)
-            logger.info("1min indicators initialized for %s (%d candles)",
-                        self.epic, len(candles_1min))
 
         if candles_15min:
             self._suite_15min = IndicatorSuite(candles_15min, is_15min=True)
-            logger.info("15min indicators initialized for %s (%d candles)",
-                        self.epic, len(candles_15min))
 
         # Build daily returns from historical daily candles
         if candles_daily:
@@ -825,11 +821,8 @@ class FeatureEngine:
                 last_daily = candles_daily[-1]
                 self._current_daily_open = last_daily.open
                 self._current_daily_date = last_daily.timestamp.date()
-            logger.info(
-                "Daily data initialized for %s: %d returns, daily_open=%.2f",
-                self.epic, len(self._daily_returns),
-                self._current_daily_open or 0,
-            )
+            logger.debug("Daily data for %s: %d returns, open=%.2f",
+                         self.epic, len(self._daily_returns), self._current_daily_open or 0)
 
     def update_1min(self, candle: OHLCVCandle):
         # Track daily open: reset on new trading day
@@ -844,8 +837,7 @@ class FeatureEngine:
             self._current_daily_open = candle.open
             self._current_daily_date = candle_date
             self._daily_opens.append(candle.open)
-            logger.info("[%s] New trading day: daily_open=%.2f, %d daily returns available",
-                        self.epic, candle.open, len(self._daily_returns))
+            logger.debug("[%s] New trading day: daily_open=%.2f", self.epic, candle.open)
 
         if self._suite_1min:
             self._suite_1min.add(candle)

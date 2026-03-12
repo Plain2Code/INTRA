@@ -226,7 +226,6 @@ class CapitalClient:
         streaming_host = data.get("streamingHost", "")
         if streaming_host:
             self._ws_url = streaming_host.rstrip("/") + "/connect"
-            logger.info("WebSocket URL from API: %s", self._ws_url)
 
         logger.info("Logged in to Capital.com (%s mode)", self._mode)
 
@@ -344,8 +343,7 @@ class CapitalClient:
         resp = await self._request("POST", "/positions", json_body=body)
         resp.raise_for_status()
         deal_ref = resp.json().get("dealReference", "")
-        logger.info("Opened position: %s %s %s size=%.2f → ref=%s",
-                     epic, direction, "trailing" if trailing_stop else "", size, deal_ref)
+        logger.debug("API open_position: %s %s size=%.2f ref=%s", epic, direction, size, deal_ref)
         return deal_ref
 
     async def modify_position(
@@ -371,7 +369,7 @@ class CapitalClient:
         resp = await self._request("PUT", f"/positions/{deal_id}", json_body=body)
         ok = resp.status_code < 400
         if ok:
-            logger.info("Modified position %s: %s", deal_id, body)
+            logger.debug("Modified position %s", deal_id)
         return ok
 
     async def close_position(self, deal_id: str) -> bool:
@@ -379,7 +377,7 @@ class CapitalClient:
         resp = await self._request("DELETE", f"/positions/{deal_id}")
         ok = resp.status_code < 400
         if ok:
-            logger.info("Closed position %s", deal_id)
+            logger.debug("API close_position %s", deal_id)
         return ok
 
     # ------------------------------------------------------------------
@@ -475,8 +473,6 @@ class CapitalClient:
 
         transactions = []
         raw_txns = resp.json().get("transactions", [])
-        if raw_txns:
-            logger.info("Raw transaction sample: %s", json.dumps(raw_txns[0], indent=2))
         for t in raw_txns:
             # Capital.com uses "transactionType" (not "type"), and P&L is
             # in the "size" field as a string in account currency (EUR).
@@ -528,7 +524,7 @@ class CapitalClient:
         """Establish WebSocket connection."""
         self._ws = await websockets.asyncio.client.connect(self._ws_url)
         self._ws_running = True
-        logger.info("WebSocket connected to %s", self._ws_url)
+        logger.debug("WebSocket connected")
 
     async def ws_subscribe_ohlc(
         self, epics: list[str], resolutions: list[str] | None = None
@@ -551,7 +547,7 @@ class CapitalClient:
             },
         }
         await self._ws.send(json.dumps(msg))
-        logger.info("Subscribed to OHLC: epics=%s resolutions=%s", epics, resolutions)
+        logger.debug("Subscribed OHLC: %s %s", epics, resolutions)
 
     async def ws_subscribe_prices(self, epics: list[str]):
         """Subscribe to real-time bid/ask price updates."""
@@ -568,7 +564,7 @@ class CapitalClient:
             },
         }
         await self._ws.send(json.dumps(msg))
-        logger.info("Subscribed to prices: epics=%s", epics)
+        logger.debug("Subscribed prices: %s", epics)
 
     async def ws_ping(self):
         """Send keep-alive ping."""
@@ -612,12 +608,6 @@ class CapitalClient:
                 msg_count += 1
                 try:
                     data = json.loads(raw)
-                    # Log first few messages and every 100th for diagnostics
-                    if msg_count <= 3 or msg_count % 100 == 0:
-                        dest = data.get("destination", "?")
-                        status = data.get("status", "")
-                        logger.info("WS msg #%d: dest=%s status=%s keys=%s",
-                                    msg_count, dest, status, list(data.keys()))
                     await on_message(data)
                 except json.JSONDecodeError:
                     logger.warning("Non-JSON WebSocket message: %s", raw[:200])
@@ -634,4 +624,4 @@ class CapitalClient:
         if self._ws is not None:
             await self._ws.close()
             self._ws = None
-            logger.info("WebSocket disconnected")
+            logger.debug("WebSocket disconnected")

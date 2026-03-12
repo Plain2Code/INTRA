@@ -181,12 +181,9 @@ class DataFeed:
             if epic != epics[-1]:
                 await asyncio.sleep(0.2)  # small delay between epics
 
-        for epic in epics:
-            logger.info(
-                "Buffers loaded for %s: 1min=%d, 15min=%d, daily=%d candles",
-                epic, len(self._buffers_1min[epic]),
-                len(self._buffers_15min[epic]), len(self._buffers_daily[epic])
-            )
+        total_1m = sum(len(self._buffers_1min[e]) for e in epics)
+        total_15m = sum(len(self._buffers_15min[e]) for e in epics)
+        logger.info("Historical data loaded: %d epics, %d 1min candles, %d 15min candles", len(epics), total_1m, total_15m)
 
     async def _load_history(
         self, epic: str, resolution: str, max_candles: int, buffer: CandleBuffer
@@ -208,10 +205,6 @@ class DataFeed:
                     self._last_1min_ts[epic] = ts_key
                 else:
                     self._last_15min_ts[epic] = ts_key
-            if epic in self._spread_counts and self._spread_counts[epic] > 0:
-                avg = self._spread_sums[epic] / self._spread_counts[epic]
-                logger.info("Average spread for %s: %.2f (%d samples)",
-                            epic, avg, self._spread_counts[epic])
         except Exception as e:
             logger.error("Failed to load %s history for %s: %s", resolution, epic, e)
 
@@ -241,7 +234,7 @@ class DataFeed:
                 await self._client.ws_connect()
                 await self._client.ws_subscribe_ohlc(epics, resolutions)
                 backoff = 2  # reset on successful connect
-                logger.info("WebSocket streaming active, listening for candles...")
+                logger.debug("WebSocket streaming active")
                 # Blocks until disconnect
                 await self._client.ws_listen(self._handle_ws_message)
             except Exception as e:
@@ -255,7 +248,7 @@ class DataFeed:
             # Re-authenticate in case tokens expired
             try:
                 await self._client.create_session()
-                logger.info("Re-authenticated for WebSocket reconnect")
+                logger.debug("Re-authenticated for WS reconnect")
             except Exception as e:
                 logger.error("Re-auth failed: %s, retrying...", e)
 
@@ -375,7 +368,7 @@ class DataFeed:
 
     async def _poll_15min_loop(self, epics: list[str]):
         """Poll for new 15min candles via REST if WebSocket doesn't support it."""
-        logger.info("Starting 15min REST polling fallback (interval=%.0fs)", self._poll_15min_interval)
+        logger.debug("15min REST polling started (interval=%.0fs)", self._poll_15min_interval)
         while True:
             try:
                 await asyncio.sleep(self._poll_15min_interval)
